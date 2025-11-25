@@ -1,5 +1,7 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
+const menuOverlay = document.getElementById("menu-overlay");
+const btnStartEndless = document.getElementById("btn-start-endless");
 
 const WIDTH = canvas.width;
 const HEIGHT = canvas.height;
@@ -95,6 +97,8 @@ const state = {
   isMouseDown: false,
   gameOver: false,
   paused: false,
+  scene: "menu",
+  mode: null,
 };
 
 function resetGame() {
@@ -133,10 +137,21 @@ function resetGame() {
 }
 
 function togglePause() {
-  if (state.gameOver) return;
+  if (state.gameOver || state.scene !== "game") return;
   state.paused = !state.paused;
   state.isMouseDown = false;
   state.keys[" "] = false;
+}
+
+function startMode(mode) {
+  state.mode = mode;
+  state.scene = "game";
+  resetGame();
+  if (menuOverlay) menuOverlay.style.display = "none";
+}
+
+if (btnStartEndless) {
+  btnStartEndless.addEventListener("click", () => startMode("endless"));
 }
 
 function randRange(min, max) {
@@ -374,7 +389,7 @@ function shootEnemyBullet(enemy) {
 }
 
 function fireWeapon() {
-  if (state.paused) return;
+  if (state.paused || state.scene !== "game") return;
   const profile = WEAPON_STAGES[state.weaponStage];
   if (!profile) return;
   if (state.bulletCooldown > 0 || state.energy < profile.cost) return;
@@ -886,6 +901,10 @@ function updateTimers() {
 
 function updateGame() {
   updateStarfield();
+  if (state.scene !== "game") {
+    updateParticles();
+    return;
+  }
   if (state.paused) return;
   updateParticles();
   if (!state.gameOver) {
@@ -919,14 +938,18 @@ function updateGame() {
 
 function renderGame() {
   drawBackground();
-  drawCollectibles();
-  state.enemies.forEach(drawEnemyShape);
-  drawBullets();
-  drawParticles();
-  drawPlayerAvatar();
-  drawHUD();
-  if (state.gameOver) drawGameOver();
-  else if (state.paused) drawPauseOverlay();
+  if (state.scene === "game") {
+    drawCollectibles();
+    state.enemies.forEach(drawEnemyShape);
+    drawBullets();
+    drawParticles();
+    drawPlayerAvatar();
+    drawHUD();
+    if (state.gameOver) drawGameOver();
+    else if (state.paused) drawPauseOverlay();
+  } else {
+    drawParticles();
+  }
 }
 
 function gameLoop() {
@@ -939,7 +962,7 @@ function gameLoop() {
 window.addEventListener("keydown", (e) => {
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   state.keys[key] = true;
-  if (key === "p" && !e.repeat) togglePause();
+  if (key === "p" && state.scene === "game" && !e.repeat) togglePause();
   if (e.key === "r" || e.key === "R") {
     if (state.gameOver) resetGame();
   }
@@ -954,7 +977,7 @@ window.addEventListener("keyup", (e) => {
 });
 
 canvas.addEventListener("mousedown", (e) => {
-  if (e.button === 0 && !state.gameOver && !state.paused) {
+  if (e.button === 0 && state.scene === "game" && !state.gameOver && !state.paused) {
     state.isMouseDown = true;
     fireWeapon();
   }
