@@ -67,6 +67,8 @@ const state = {
   energyMax: BASE_ENERGY_MAX,
   bullets: [],
   enemyBullets: [],
+  particles: [],
+  backgroundStars: [],
   bulletCooldown: 0,
   collectibles: [],
   collectiblesTimer: 0,
@@ -100,6 +102,7 @@ function resetGame() {
   state.energy = state.energyMax;
   state.bullets = [];
   state.enemyBullets = [];
+  state.particles = [];
   state.bulletCooldown = 0;
   state.collectibles = [];
   state.collectiblesTimer = 0;
@@ -140,6 +143,64 @@ function chooseWeighted(options, weightKey = "weight") {
     }
   }
   return options[options.length - 1];
+}
+
+function initStarfield() {
+  state.backgroundStars = Array.from({ length: 80 }, () => ({
+    x: Math.random() * WIDTH,
+    y: Math.random() * HEIGHT,
+    size: randRange(0.8, 2.2),
+    speed: randRange(0.15, 0.55),
+    offset: Math.random() * 360,
+  }));
+}
+
+function updateStarfield() {
+  for (const star of state.backgroundStars) {
+    star.y += star.speed;
+    if (star.y > HEIGHT + 10) {
+      star.y = -10;
+      star.x = Math.random() * WIDTH;
+    }
+  }
+}
+
+function spawnParticles({
+  x,
+  y,
+  color = COLORS.white,
+  count = 12,
+  speed = [1, 3],
+  size = [2, 4],
+  life = [15, 35],
+  spread = Math.PI * 2,
+}) {
+  for (let i = 0; i < count; i += 1) {
+    const angle = Math.random() * spread;
+    const magnitude = randRange(speed[0], speed[1]);
+    state.particles.push({
+      pos: { x, y },
+      vel: { x: Math.cos(angle) * magnitude, y: Math.sin(angle) * magnitude },
+      radius: randRange(size[0], size[1]),
+      life: randRange(life[0], life[1]),
+      alpha: 1,
+      color,
+      decay: randRange(0.02, 0.05),
+    });
+  }
+}
+
+function updateParticles() {
+  state.particles = state.particles.filter((p) => {
+    p.pos.x += p.vel.x;
+    p.pos.y += p.vel.y;
+    p.vel.x *= 0.96;
+    p.vel.y *= 0.96;
+    p.radius *= 0.985;
+    p.life -= 1;
+    p.alpha -= p.decay;
+    return p.life > 0 && p.alpha > 0 && p.radius > 0.1;
+  });
 }
 
 function spawnCollectible(initial = false) {
@@ -321,6 +382,17 @@ function fireWeapon() {
     });
   }
 
+  spawnParticles({
+    x: state.player.x,
+    y: state.player.y,
+    color: profile.color,
+    count: 4 + profile.angles.length * 2,
+    speed: [0.5, 1.6],
+    size: [1, 2.5],
+    life: [8, 16],
+    spread: Math.PI / 2,
+  });
+
   state.bulletCooldown = profile.cooldown;
   state.energy -= profile.cost;
 }
@@ -356,6 +428,15 @@ function handleEnemyHits() {
         if (bullet.pierce > 0) bullet.pierce -= 1;
         else bullet.pos.x = -9999;
         hit = true;
+        spawnParticles({
+          x: enemy.pos.x,
+          y: enemy.pos.y,
+          color: enemy.color,
+          count: 18,
+          speed: [1.2, 3.8],
+          size: [2, 5],
+          life: [18, 32],
+        });
         if (enemy.behavior === "shooter") {
           state.collectibles.push({
             name: "energy",
@@ -381,6 +462,15 @@ function handleCollectibles() {
   for (const item of state.collectibles) {
     const dist = Math.hypot(item.pos.x - x, item.pos.y - y);
     if (dist < item.radius + playerRadius) {
+      spawnParticles({
+        x: item.pos.x,
+        y: item.pos.y,
+        color: item.color,
+        count: 10,
+        speed: [0.8, 2.2],
+        size: [1.5, 3.5],
+        life: [14, 26],
+      });
       if (item.value) state.score += Math.round(item.value * state.multiplier);
       if (item.energy) state.energy = Math.min(state.energyMax, state.energy + item.energy);
       if (item.shield) state.shieldTimer = Math.max(state.shieldTimer, item.shield);
@@ -397,11 +487,29 @@ function handlePlayerDamage() {
   if (state.shieldTimer > 0) {
     state.shieldTimer = Math.max(0, state.shieldTimer - 120);
     state.invincibleTimer = 30;
+    spawnParticles({
+      x: state.player.x,
+      y: state.player.y,
+      color: COLORS.cyan,
+      count: 16,
+      speed: [1, 3],
+      size: [2, 4],
+      life: [16, 28],
+    });
     return;
   }
   if (state.invincibleTimer > 0) return;
   state.lives -= 1;
   state.invincibleTimer = 90;
+  spawnParticles({
+    x: state.player.x,
+    y: state.player.y,
+    color: COLORS.red,
+    count: 20,
+    speed: [1.2, 3.5],
+    size: [2, 5],
+    life: [18, 30],
+  });
   if (state.lives <= 0) state.gameOver = true;
 }
 
@@ -481,8 +589,51 @@ function regularPolygonPoints(cx, cy, radius, sides, rotationDeg = 0) {
   return points;
 }
 
+function drawBackground() {
+  const gradient = ctx.createLinearGradient(0, 0, 0, HEIGHT);
+  gradient.addColorStop(0, "#181f46");
+  gradient.addColorStop(0.4, "#0d1331");
+  gradient.addColorStop(1, "#05060f");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+
+  ctx.save();
+  for (const star of state.backgroundStars) {
+    const twinkle = (Math.sin(Date.now() * 0.002 + star.offset) + 1) * 0.3;
+    ctx.globalAlpha = 0.2 + twinkle;
+    ctx.fillStyle = COLORS.white;
+    ctx.beginPath();
+    ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawParticles() {
+  ctx.save();
+  for (const particle of state.particles) {
+    ctx.globalAlpha = Math.max(0, particle.alpha);
+    ctx.fillStyle = particle.color;
+    ctx.beginPath();
+    ctx.arc(particle.pos.x, particle.pos.y, particle.radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
 function drawEnemyShape(enemy) {
-  ctx.fillStyle = enemy.color;
+  const gradient = ctx.createRadialGradient(
+    enemy.pos.x,
+    enemy.pos.y,
+    enemy.radius * 0.2,
+    enemy.pos.x,
+    enemy.pos.y,
+    enemy.radius
+  );
+  gradient.addColorStop(0, "rgba(255,255,255,0.85)");
+  gradient.addColorStop(1, enemy.color);
+  ctx.fillStyle = gradient;
   ctx.strokeStyle = COLORS.white;
   ctx.lineWidth = 2;
 
@@ -552,7 +703,10 @@ function drawPlayerAvatar() {
   const style = PLAYER_STAGE_STYLE[stage] ?? PLAYER_STAGE_STYLE[4];
   const { x, y, size } = state.player;
   const half = size / 2;
-  ctx.fillStyle = style.color;
+  const gradient = ctx.createRadialGradient(x, y, half * 0.2, x, y, half);
+  gradient.addColorStop(0, "rgba(255,255,255,0.9)");
+  gradient.addColorStop(1, style.color);
+  ctx.fillStyle = gradient;
   ctx.strokeStyle = style.outline;
   ctx.lineWidth = 2;
 
@@ -603,6 +757,9 @@ function drawPlayerAvatar() {
 
 function drawCollectibles() {
   for (const item of state.collectibles) {
+    ctx.save();
+    ctx.shadowColor = item.color;
+    ctx.shadowBlur = 12;
     ctx.fillStyle = item.color;
     ctx.strokeStyle = COLORS.white;
     ctx.lineWidth = 1.5;
@@ -610,21 +767,30 @@ function drawCollectibles() {
     ctx.arc(item.pos.x, item.pos.y, item.radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+    ctx.restore();
   }
 }
 
 function drawBullets() {
   for (const bullet of state.bullets) {
+    ctx.save();
+    ctx.shadowColor = bullet.color ?? COLORS.white;
+    ctx.shadowBlur = 10;
     ctx.fillStyle = bullet.color ?? COLORS.white;
     ctx.beginPath();
     ctx.arc(bullet.pos.x, bullet.pos.y, bullet.radius ?? 4, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
   }
   for (const bullet of state.enemyBullets) {
+    ctx.save();
+    ctx.shadowColor = bullet.color ?? COLORS.red;
+    ctx.shadowBlur = 8;
     ctx.fillStyle = bullet.color ?? COLORS.red;
     ctx.beginPath();
     ctx.arc(bullet.pos.x, bullet.pos.y, bullet.radius ?? 5, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
   }
 }
 
@@ -693,6 +859,8 @@ function updateTimers() {
 }
 
 function updateGame() {
+  updateStarfield();
+  updateParticles();
   if (!state.gameOver) {
     if (state.keys[" "] || state.isMouseDown) fireWeapon();
 
@@ -723,10 +891,11 @@ function updateGame() {
 }
 
 function renderGame() {
-  ctx.clearRect(0, 0, WIDTH, HEIGHT);
+  drawBackground();
   drawCollectibles();
   state.enemies.forEach(drawEnemyShape);
   drawBullets();
+  drawParticles();
   drawPlayerAvatar();
   drawHUD();
   if (state.gameOver) drawGameOver();
@@ -778,5 +947,6 @@ canvas.addEventListener("mousemove", (e) => {
   };
 });
 
+initStarfield();
 resetGame();
 gameLoop();
