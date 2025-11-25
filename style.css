@@ -58,3 +58,74 @@ h2 {
   margin: 0 0 0.8rem;
   color: #c8d0ff;
 }
+
+.menu-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(5, 6, 15, 0.85);
+  backdrop-filter: blur(4px);
+  z-index: 10;
+}
+
+.menu-card {
+  background: linear-gradient(135deg, rgba(20, 28, 60, 0.9), rgba(10, 14, 30, 0.9));
+  border: 1px solid rgba(120, 247, 255, 0.35);
+  border-radius: 14px;
+  padding: 1.5rem 1.75rem;
+  width: min(480px, 90%);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+}
+
+.menu-card h2 {
+  margin: 0 0 0.5rem;
+  color: #79f7ff;
+  letter-spacing: 0.08em;
+}
+
+.menu-subtitle {
+  margin: 0 0 1rem;
+  color: #c8d0ff;
+}
+
+.menu-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.menu-actions button {
+  flex: 1;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 1px solid rgba(120, 247, 255, 0.4);
+  background: rgba(15, 25, 50, 0.9);
+  color: #e8f7ff;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.menu-actions button.primary {
+  background: linear-gradient(135deg, #1dd8ff, #5cf3ff);
+  color: #05060f;
+  font-weight: 700;
+  border: none;
+  box-shadow: 0 6px 20px rgba(29, 216, 255, 0.35);
+}
+
+.menu-actions button.ghost {
+  border: 1px dashed rgba(120, 247, 255, 0.4);
+  color: #9ab0d8;
+}
+
+.menu-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.menu-actions button:not(:disabled):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.3);
+}
