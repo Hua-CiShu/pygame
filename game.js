@@ -94,6 +94,7 @@ const state = {
   keys: {},
   isMouseDown: false,
   gameOver: false,
+  paused: false,
 };
 
 function resetGame() {
@@ -124,9 +125,18 @@ function resetGame() {
   state.weaponStage = 1;
   state.bulletSpeed = BASE_BULLET_SPEED;
   state.gameOver = false;
+  state.paused = false;
+  state.isMouseDown = false;
   for (let i = 0; i < 4; i += 1) {
     spawnCollectible(true);
   }
+}
+
+function togglePause() {
+  if (state.gameOver) return;
+  state.paused = !state.paused;
+  state.isMouseDown = false;
+  state.keys[" "] = false;
 }
 
 function randRange(min, max) {
@@ -364,6 +374,7 @@ function shootEnemyBullet(enemy) {
 }
 
 function fireWeapon() {
+  if (state.paused) return;
   const profile = WEAPON_STAGES[state.weaponStage];
   if (!profile) return;
   if (state.bulletCooldown > 0 || state.energy < profile.cost) return;
@@ -827,9 +838,11 @@ function drawHUD() {
 
   ctx.fillStyle = COLORS.white;
   ctx.font = "16px Segoe UI";
-  ctx.fillText("Move: WASD | Shoot: SPACE / LMB", 15, HEIGHT - 45);
-  ctx.fillText("Collect orbs for energy/shields/multipliers", 15, HEIGHT - 25);
-  ctx.fillText("Weapon evolves every 3 levels; shapes hint attacks.", 15, HEIGHT - 5);
+  const infoY = HEIGHT - 65;
+  ctx.fillText("Move: WASD | Shoot: SPACE / LMB", 15, infoY);
+  ctx.fillText("Collect orbs for energy/shields/multipliers", 15, infoY + 20);
+  ctx.fillText("Weapon evolves every 3 levels; shapes hint attacks.", 15, infoY + 40);
+  ctx.fillText("Pause/Resume: P", 15, infoY + 60);
 }
 
 function drawGameOver() {
@@ -841,6 +854,19 @@ function drawGameOver() {
   ctx.fillText("Game Over", WIDTH / 2, HEIGHT / 2 - 10);
   ctx.font = "24px Segoe UI";
   ctx.fillText("Press R to restart", WIDTH / 2, HEIGHT / 2 + 30);
+  ctx.textAlign = "start";
+}
+
+function drawPauseOverlay() {
+  ctx.fillStyle = "rgba(0,0,0,0.5)";
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  ctx.fillStyle = COLORS.white;
+  ctx.font = "48px Segoe UI";
+  ctx.textAlign = "center";
+  ctx.fillText("Paused", WIDTH / 2, HEIGHT / 2 - 10);
+  ctx.font = "24px Segoe UI";
+  ctx.fillStyle = COLORS.cyan;
+  ctx.fillText("Press P to resume", WIDTH / 2, HEIGHT / 2 + 30);
   ctx.textAlign = "start";
 }
 
@@ -860,6 +886,7 @@ function updateTimers() {
 
 function updateGame() {
   updateStarfield();
+  if (state.paused) return;
   updateParticles();
   if (!state.gameOver) {
     if (state.keys[" "] || state.isMouseDown) fireWeapon();
@@ -899,6 +926,7 @@ function renderGame() {
   drawPlayerAvatar();
   drawHUD();
   if (state.gameOver) drawGameOver();
+  else if (state.paused) drawPauseOverlay();
 }
 
 function gameLoop() {
@@ -911,6 +939,7 @@ function gameLoop() {
 window.addEventListener("keydown", (e) => {
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   state.keys[key] = true;
+  if (key === "p" && !e.repeat) togglePause();
   if (e.key === "r" || e.key === "R") {
     if (state.gameOver) resetGame();
   }
@@ -925,7 +954,7 @@ window.addEventListener("keyup", (e) => {
 });
 
 canvas.addEventListener("mousedown", (e) => {
-  if (e.button === 0 && !state.gameOver) {
+  if (e.button === 0 && !state.gameOver && !state.paused) {
     state.isMouseDown = true;
     fireWeapon();
   }
