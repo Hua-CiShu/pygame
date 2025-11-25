@@ -1,0 +1,782 @@
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const WIDTH = canvas.width;
+const HEIGHT = canvas.height;
+
+const COLORS = {
+  white: "#FFFFFF",
+  black: "#05060F",
+  blue: "#468CFF",
+  green: "#50FF8C",
+  red: "#F05A5A",
+  gold: "#FFD278",
+  cyan: "#78F7FF",
+  orange: "#FFA755",
+  purple: "#C684FF",
+};
+
+const WEAPON_STAGES = {
+  1: { name: "Pulse Shot", angles: [0], color: COLORS.white, radius: 4, pierce: 0, cost: 14, cooldown: 10, speedBonus: 0 },
+  2: { name: "Twin Fangs", angles: [-10, 10], color: COLORS.cyan, radius: 4, pierce: 0, cost: 18, cooldown: 12, speedBonus: 0.5 },
+  3: { name: "Tri Nova", angles: [-18, 0, 18], color: COLORS.orange, radius: 5, pierce: 1, cost: 22, cooldown: 14, speedBonus: 0.8 },
+  4: { name: "Vortex Lance", angles: [-25, -8, 8, 25], color: COLORS.purple, radius: 5, pierce: 1, cost: 26, cooldown: 16, speedBonus: 1.1 },
+};
+const MAX_WEAPON_STAGE = Math.max(...Object.keys(WEAPON_STAGES).map(Number));
+
+const PLAYER_STAGE_STYLE = {
+  1: { shape: "square", color: COLORS.blue, outline: COLORS.white },
+  2: { shape: "diamond", color: COLORS.cyan, outline: COLORS.white },
+  3: { shape: "hex", color: COLORS.orange, outline: COLORS.cyan },
+  4: { shape: "oct", color: COLORS.purple, outline: COLORS.cyan },
+};
+
+const COLLECTIBLE_TYPES = [
+  { name: "coin", color: COLORS.gold, radius: 13, weight: 4, value: 12 },
+  { name: "energy", color: COLORS.cyan, radius: 13, weight: 3, energy: 30 },
+  { name: "shield", color: COLORS.white, radius: 14, weight: 2, shield: 240 },
+  { name: "multiplier", color: COLORS.orange, radius: 14, weight: 1, multiplier: 2, duration: 420 },
+];
+
+const ENEMY_TYPES = [
+  { name: "slow", behavior: "slow", color: COLORS.red, speed: 1.6, radius: 22, weight: 4 },
+  { name: "sneaky", behavior: "sneak", color: "#FF8C5A", speed: 2.5, radius: 16, weight: 3 },
+  { name: "zigzag", behavior: "zigzag", color: "#FF78D2", speed: 2.2, radius: 18, weight: 2 },
+  { name: "shooter", behavior: "shooter", color: "#FFD890", speed: 1.8, radius: 20, weight: 2 },
+  { name: "charger", behavior: "charger", color: "#78FFAA", speed: 2.0, radius: 18, weight: 2 },
+];
+
+const LEVEL_BONUSES = [
+  { label: "Move speed +0.4", code: "speed" },
+  { label: "Max enemies +1", code: "enemy_cap" },
+  { label: "Energy max +15", code: "energy" },
+  { label: "Bullet speed +1", code: "bullet" },
+  { label: "Gain 1 extra life", code: "life" },
+];
+
+const BASE_SPEED = 5;
+const BASE_ENERGY_MAX = 100;
+const ENERGY_REGEN = 0.35;
+const ENEMY_BULLET_SPEED = 4.2;
+const LEVEL_SCORE_STEP = 140;
+const BASE_BULLET_SPEED = 8.5;
+
+const state = {
+  player: { x: WIDTH / 2, y: HEIGHT / 2, size: 32, speed: BASE_SPEED },
+  energy: BASE_ENERGY_MAX,
+  energyMax: BASE_ENERGY_MAX,
+  bullets: [],
+  enemyBullets: [],
+  bulletCooldown: 0,
+  collectibles: [],
+  collectiblesTimer: 0,
+  collectiblesInterval: 70,
+  enemies: [],
+  enemySpawnTimer: 0,
+  enemySpawnInterval: 210,
+  maxEnemies: 6,
+  score: 0,
+  lives: 4,
+  invincibleTimer: 0,
+  shieldTimer: 0,
+  multiplier: 1,
+  multiplierTimer: 0,
+  level: 1,
+  nextLevelScore: LEVEL_SCORE_STEP,
+  bonusIndex: 0,
+  bonusMessage: "",
+  bonusMessageTimer: 0,
+  weaponStage: 1,
+  bulletSpeed: BASE_BULLET_SPEED,
+  mousePos: { x: WIDTH / 2, y: HEIGHT / 2 },
+  keys: {},
+  isMouseDown: false,
+  gameOver: false,
+};
+
+function resetGame() {
+  state.player = { x: WIDTH / 2, y: HEIGHT / 2, size: 32, speed: BASE_SPEED };
+  state.energyMax = BASE_ENERGY_MAX;
+  state.energy = state.energyMax;
+  state.bullets = [];
+  state.enemyBullets = [];
+  state.bulletCooldown = 0;
+  state.collectibles = [];
+  state.collectiblesTimer = 0;
+  state.enemies = [];
+  state.enemySpawnTimer = 0;
+  state.enemySpawnInterval = 210;
+  state.maxEnemies = 6;
+  state.score = 0;
+  state.lives = 4;
+  state.invincibleTimer = 0;
+  state.shieldTimer = 0;
+  state.multiplier = 1;
+  state.multiplierTimer = 0;
+  state.level = 1;
+  state.nextLevelScore = LEVEL_SCORE_STEP;
+  state.bonusIndex = 0;
+  state.bonusMessage = "";
+  state.bonusMessageTimer = 0;
+  state.weaponStage = 1;
+  state.bulletSpeed = BASE_BULLET_SPEED;
+  state.gameOver = false;
+  for (let i = 0; i < 4; i += 1) {
+    spawnCollectible(true);
+  }
+}
+
+function randRange(min, max) {
+  return Math.random() * (max - min) + min;
+}
+
+function chooseWeighted(options, weightKey = "weight") {
+  const total = options.reduce((sum, opt) => sum + (opt[weightKey] ?? 1), 0);
+  let pick = Math.random() * total;
+  for (const opt of options) {
+    pick -= opt[weightKey] ?? 1;
+    if (pick <= 0) {
+      return opt;
+    }
+  }
+  return options[options.length - 1];
+}
+
+function spawnCollectible(initial = false) {
+  if (!initial && state.collectibles.length >= 6) return;
+  const padding = 50;
+  const x = randRange(padding, WIDTH - padding);
+  const y = randRange(padding, HEIGHT - padding);
+  const template = chooseWeighted(COLLECTIBLE_TYPES);
+  state.collectibles.push({
+    ...template,
+    pos: { x, y },
+  });
+}
+
+function spawnEnemy() {
+  if (state.enemies.length >= state.maxEnemies) return;
+  const side = chooseWeighted(
+    [
+      { val: "top", weight: 1 },
+      { val: "bottom", weight: 1 },
+      { val: "left", weight: 1 },
+      { val: "right", weight: 1 },
+    ],
+    "weight"
+  ).val;
+
+  let pos;
+  if (side === "top") pos = { x: randRange(0, WIDTH), y: -25 };
+  else if (side === "bottom") pos = { x: randRange(0, WIDTH), y: HEIGHT + 25 };
+  else if (side === "left") pos = { x: -25, y: randRange(0, HEIGHT) };
+  else pos = { x: WIDTH + 25, y: randRange(0, HEIGHT) };
+
+  const template = chooseWeighted(ENEMY_TYPES);
+  state.enemies.push({
+    ...template,
+    pos,
+    zigzagDir: Math.random() < 0.5 ? -1 : 1,
+    zigzagTimer: 0,
+    shootCooldown: randRange(90, 140),
+    dashCooldown: randRange(120, 160),
+    state: "chase",
+    stateTimer: 0,
+    dashDir: { x: 0, y: 0 },
+  });
+}
+
+function normalize(vec) {
+  const len = Math.hypot(vec.x, vec.y);
+  if (!len) return { x: 0, y: 0 };
+  return { x: vec.x / len, y: vec.y / len };
+}
+
+function rotateVector(vec, angleDeg) {
+  const rad = (angleDeg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return {
+    x: vec.x * cos - vec.y * sin,
+    y: vec.x * sin + vec.y * cos,
+  };
+}
+
+function movePlayer() {
+  let dx = 0;
+  let dy = 0;
+  if (state.keys["a"] || state.keys["ArrowLeft"]) dx -= state.player.speed;
+  if (state.keys["d"] || state.keys["ArrowRight"]) dx += state.player.speed;
+  if (state.keys["w"] || state.keys["ArrowUp"]) dy -= state.player.speed;
+  if (state.keys["s"] || state.keys["ArrowDown"]) dy += state.player.speed;
+
+  if (dx && dy) {
+    dx *= Math.SQRT1_2;
+    dy *= Math.SQRT1_2;
+  }
+  state.player.x = Math.min(Math.max(state.player.x + dx, state.player.size / 2), WIDTH - state.player.size / 2);
+  state.player.y = Math.min(Math.max(state.player.y + dy, state.player.size / 2), HEIGHT - state.player.size / 2);
+}
+
+function moveEnemies() {
+  for (const enemy of state.enemies) {
+    const toPlayer = { x: state.player.x - enemy.pos.x, y: state.player.y - enemy.pos.y };
+    const distance = Math.hypot(toPlayer.x, toPlayer.y) || 0.0001;
+    const baseDir = { x: toPlayer.x / distance, y: toPlayer.y / distance };
+
+    switch (enemy.behavior) {
+      case "slow":
+        enemy.pos.x += baseDir.x * enemy.speed;
+        enemy.pos.y += baseDir.y * enemy.speed;
+        break;
+      case "sneak": {
+        const perpendicular = { x: -baseDir.y, y: baseDir.x };
+        enemy.pos.x += (baseDir.x * 0.7 + perpendicular.x * 0.35) * enemy.speed;
+        enemy.pos.y += (baseDir.y * 0.7 + perpendicular.y * 0.35) * enemy.speed;
+        break;
+      }
+      case "zigzag": {
+        enemy.zigzagTimer += 1;
+        if (enemy.zigzagTimer % 45 === 0) enemy.zigzagDir *= -1;
+        const sideways = { x: -baseDir.y * 0.6 * enemy.zigzagDir, y: baseDir.x * 0.6 * enemy.zigzagDir };
+        enemy.pos.x += (baseDir.x + sideways.x) * enemy.speed;
+        enemy.pos.y += (baseDir.y + sideways.y) * enemy.speed;
+        break;
+      }
+      case "shooter": {
+        const preferred = 220;
+        if (distance > preferred + 20) {
+          enemy.pos.x += baseDir.x * enemy.speed;
+          enemy.pos.y += baseDir.y * enemy.speed;
+        } else if (distance < preferred - 30) {
+          enemy.pos.x -= baseDir.x * enemy.speed;
+          enemy.pos.y -= baseDir.y * enemy.speed;
+        }
+        enemy.shootCooldown -= 1;
+        if (enemy.shootCooldown <= 0) {
+          shootEnemyBullet(enemy);
+          enemy.shootCooldown = randRange(110, 150);
+        }
+        break;
+      }
+      case "charger": {
+        enemy.dashCooldown -= 1;
+        if (enemy.state === "chase") {
+          enemy.pos.x += baseDir.x * enemy.speed;
+          enemy.pos.y += baseDir.y * enemy.speed;
+          if (enemy.dashCooldown <= 0) {
+            enemy.state = "windup";
+            enemy.stateTimer = 30;
+          }
+        } else if (enemy.state === "windup") {
+          enemy.stateTimer -= 1;
+          enemy.pos.x += randRange(-1, 1);
+          enemy.pos.y += randRange(-1, 1);
+          if (enemy.stateTimer <= 0) {
+            enemy.state = "dash";
+            enemy.stateTimer = 20;
+            enemy.dashDir = { ...baseDir };
+          }
+        } else if (enemy.state === "dash") {
+          enemy.pos.x += enemy.dashDir.x * enemy.speed * 4.5;
+          enemy.pos.y += enemy.dashDir.y * enemy.speed * 4.5;
+          enemy.stateTimer -= 1;
+          if (enemy.stateTimer <= 0) {
+            enemy.state = "chase";
+            enemy.dashCooldown = randRange(120, 170);
+          }
+        }
+        break;
+      }
+    }
+  }
+}
+
+function shootEnemyBullet(enemy) {
+  const direction = normalize({ x: state.player.x - enemy.pos.x, y: state.player.y - enemy.pos.y });
+  state.enemyBullets.push({
+    pos: { x: enemy.pos.x, y: enemy.pos.y },
+    vel: { x: direction.x * ENEMY_BULLET_SPEED, y: direction.y * ENEMY_BULLET_SPEED },
+    radius: 6,
+    color: enemy.color,
+  });
+}
+
+function fireWeapon() {
+  const profile = WEAPON_STAGES[state.weaponStage];
+  if (!profile) return;
+  if (state.bulletCooldown > 0 || state.energy < profile.cost) return;
+
+  const direction = normalize({ x: state.mousePos.x - state.player.x, y: state.mousePos.y - state.player.y });
+  const baseDir = direction.x || direction.y ? direction : { x: 0, y: -1 };
+
+  for (const angle of profile.angles) {
+    const shotDir = rotateVector(baseDir, angle);
+    state.bullets.push({
+      pos: { x: state.player.x, y: state.player.y },
+      vel: { x: shotDir.x * (state.bulletSpeed + profile.speedBonus), y: shotDir.y * (state.bulletSpeed + profile.speedBonus) },
+      radius: profile.radius,
+      color: profile.color,
+      pierce: profile.pierce,
+    });
+  }
+
+  state.bulletCooldown = profile.cooldown;
+  state.energy -= profile.cost;
+}
+
+function updateBullets() {
+  const arena = { x: -40, y: -40, w: WIDTH + 80, h: HEIGHT + 80 };
+  state.bullets = state.bullets.filter((bullet) => {
+    bullet.pos.x += bullet.vel.x;
+    bullet.pos.y += bullet.vel.y;
+    return (
+      bullet.pos.x >= arena.x &&
+      bullet.pos.x <= arena.x + arena.w &&
+      bullet.pos.y >= arena.y &&
+      bullet.pos.y <= arena.y + arena.h
+    );
+  });
+
+  state.enemyBullets = state.enemyBullets.filter((bullet) => {
+    bullet.pos.x += bullet.vel.x;
+    bullet.pos.y += bullet.vel.y;
+    return bullet.pos.x >= arena.x && bullet.pos.x <= arena.x + arena.w && bullet.pos.y >= arena.y && bullet.pos.y <= arena.y + arena.h;
+  });
+}
+
+function handleEnemyHits() {
+  const survivors = [];
+  for (const enemy of state.enemies) {
+    let hit = false;
+    for (const bullet of state.bullets) {
+      const dist = Math.hypot(enemy.pos.x - bullet.pos.x, enemy.pos.y - bullet.pos.y);
+      if (dist < enemy.radius) {
+        state.score += Math.round(18 * state.multiplier);
+        if (bullet.pierce > 0) bullet.pierce -= 1;
+        else bullet.pos.x = -9999;
+        hit = true;
+        if (enemy.behavior === "shooter") {
+          state.collectibles.push({
+            name: "energy",
+            color: COLORS.cyan,
+            radius: 12,
+            pos: { x: enemy.pos.x, y: enemy.pos.y },
+            energy: 30,
+          });
+        }
+        break;
+      }
+    }
+    if (!hit) survivors.push(enemy);
+  }
+  state.enemies = survivors;
+  state.bullets = state.bullets.filter((b) => b.pos.x > -1000);
+}
+
+function handleCollectibles() {
+  const { x, y, size } = state.player;
+  const playerRadius = size / 2;
+  const remain = [];
+  for (const item of state.collectibles) {
+    const dist = Math.hypot(item.pos.x - x, item.pos.y - y);
+    if (dist < item.radius + playerRadius) {
+      if (item.value) state.score += Math.round(item.value * state.multiplier);
+      if (item.energy) state.energy = Math.min(state.energyMax, state.energy + item.energy);
+      if (item.shield) state.shieldTimer = Math.max(state.shieldTimer, item.shield);
+      if (item.multiplier) {
+        state.multiplier = item.multiplier;
+        state.multiplierTimer = item.duration ?? 360;
+      }
+    } else remain.push(item);
+  }
+  state.collectibles = remain;
+}
+
+function handlePlayerDamage() {
+  if (state.shieldTimer > 0) {
+    state.shieldTimer = Math.max(0, state.shieldTimer - 120);
+    state.invincibleTimer = 30;
+    return;
+  }
+  if (state.invincibleTimer > 0) return;
+  state.lives -= 1;
+  state.invincibleTimer = 90;
+  if (state.lives <= 0) state.gameOver = true;
+}
+
+function checkCollisions() {
+  const playerRadius = state.player.size / 2;
+  for (const enemy of state.enemies) {
+    const dist = Math.hypot(state.player.x - enemy.pos.x, state.player.y - enemy.pos.y);
+    if (dist < playerRadius + enemy.radius) {
+      handlePlayerDamage();
+      break;
+    }
+  }
+  for (const bullet of state.enemyBullets) {
+    if (
+      bullet.pos.x >= state.player.x - playerRadius &&
+      bullet.pos.x <= state.player.x + playerRadius &&
+      bullet.pos.y >= state.player.y - playerRadius &&
+      bullet.pos.y <= state.player.y + playerRadius
+    ) {
+      bullet.pos.x = -9999;
+      handlePlayerDamage();
+    }
+  }
+  state.enemyBullets = state.enemyBullets.filter((b) => b.pos.x > -900);
+}
+
+function gainLevel() {
+  const bonus = LEVEL_BONUSES[state.bonusIndex];
+  state.bonusIndex = (state.bonusIndex + 1) % LEVEL_BONUSES.length;
+  switch (bonus.code) {
+    case "speed":
+      state.player.speed += 0.4;
+      break;
+    case "enemy_cap":
+      state.maxEnemies += 1;
+      break;
+    case "energy":
+      state.energyMax += 15;
+      state.energy = Math.min(state.energyMax, state.energy + 15);
+      break;
+    case "bullet":
+      state.bulletSpeed += 1;
+      break;
+    case "life":
+      state.lives += 1;
+      break;
+  }
+  state.level += 1;
+  state.nextLevelScore += LEVEL_SCORE_STEP + state.level * 25;
+  state.bonusMessage = `Level ${state.level}: ${bonus.label}`;
+  state.bonusMessageTimer = 240;
+  updateWeaponStage();
+}
+
+function updateLevelProgress() {
+  while (state.score >= state.nextLevelScore && !state.gameOver) {
+    gainLevel();
+  }
+}
+
+function updateWeaponStage() {
+  const target = Math.min(MAX_WEAPON_STAGE, 1 + Math.floor(state.level / 3));
+  if (target > state.weaponStage) {
+    state.weaponStage = target;
+    state.bonusMessage = `Weapon upgraded: ${WEAPON_STAGES[target].name}`;
+    state.bonusMessageTimer = 300;
+  }
+}
+
+function regularPolygonPoints(cx, cy, radius, sides, rotationDeg = 0) {
+  const points = [];
+  const rotation = (rotationDeg * Math.PI) / 180;
+  for (let i = 0; i < sides; i += 1) {
+    const angle = rotation + (i * Math.PI * 2) / sides;
+    points.push({ x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
+  }
+  return points;
+}
+
+function drawEnemyShape(enemy) {
+  ctx.fillStyle = enemy.color;
+  ctx.strokeStyle = COLORS.white;
+  ctx.lineWidth = 2;
+
+  switch (enemy.behavior) {
+    case "slow":
+      ctx.beginPath();
+      ctx.arc(enemy.pos.x, enemy.pos.y, enemy.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      break;
+    case "sneak":
+      ctx.beginPath();
+      ctx.moveTo(enemy.pos.x, enemy.pos.y - enemy.radius);
+      ctx.lineTo(enemy.pos.x - enemy.radius, enemy.pos.y + enemy.radius);
+      ctx.lineTo(enemy.pos.x + enemy.radius, enemy.pos.y + enemy.radius);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      break;
+    case "zigzag": {
+      const points = [
+        { x: enemy.pos.x, y: enemy.pos.y - enemy.radius },
+        { x: enemy.pos.x + enemy.radius, y: enemy.pos.y },
+        { x: enemy.pos.x, y: enemy.pos.y + enemy.radius },
+        { x: enemy.pos.x - enemy.radius, y: enemy.pos.y },
+      ];
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i += 1) ctx.lineTo(points[i].x, points[i].y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      break;
+    }
+    case "shooter": {
+      const points = regularPolygonPoints(enemy.pos.x, enemy.pos.y, enemy.radius, 6, 30);
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i += 1) ctx.lineTo(points[i].x, points[i].y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = COLORS.cyan;
+      ctx.stroke();
+      break;
+    }
+    case "charger": {
+      const size = enemy.radius * 2;
+      ctx.fillRect(enemy.pos.x - enemy.radius, enemy.pos.y - enemy.radius, size, size);
+      ctx.strokeRect(enemy.pos.x - enemy.radius, enemy.pos.y - enemy.radius, size, size);
+      ctx.beginPath();
+      ctx.moveTo(enemy.pos.x, enemy.pos.y - enemy.radius);
+      ctx.lineTo(enemy.pos.x, enemy.pos.y + enemy.radius);
+      ctx.strokeStyle = COLORS.white;
+      ctx.stroke();
+      break;
+    }
+    default:
+      ctx.beginPath();
+      ctx.arc(enemy.pos.x, enemy.pos.y, enemy.radius, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+  }
+}
+
+function drawPlayerAvatar() {
+  const stage = Math.min(state.weaponStage, Math.max(...Object.keys(PLAYER_STAGE_STYLE).map(Number)));
+  const style = PLAYER_STAGE_STYLE[stage] ?? PLAYER_STAGE_STYLE[4];
+  const { x, y, size } = state.player;
+  const half = size / 2;
+  ctx.fillStyle = style.color;
+  ctx.strokeStyle = style.outline;
+  ctx.lineWidth = 2;
+
+  if (style.shape === "square") {
+    ctx.fillRect(x - half, y - half, size, size);
+    ctx.strokeRect(x - half, y - half, size, size);
+  } else if (style.shape === "diamond") {
+    ctx.beginPath();
+    ctx.moveTo(x, y - half);
+    ctx.lineTo(x + half, y);
+    ctx.lineTo(x, y + half);
+    ctx.lineTo(x - half, y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  } else if (style.shape === "hex") {
+    const points = regularPolygonPoints(x, y, half, 6, 30);
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i += 1) ctx.lineTo(points[i].x, points[i].y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  } else {
+    const points = regularPolygonPoints(x, y, half, 8, 22.5);
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i += 1) ctx.lineTo(points[i].x, points[i].y);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  if (state.shieldTimer > 0) {
+    ctx.strokeStyle = "rgba(200,255,255,0.8)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, half * 1.3, 0, Math.PI * 2);
+    ctx.stroke();
+  } else if (state.invincibleTimer > 0) {
+    ctx.strokeStyle = "rgba(150,255,150,0.7)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x, y, half * 1.1, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+function drawCollectibles() {
+  for (const item of state.collectibles) {
+    ctx.fillStyle = item.color;
+    ctx.strokeStyle = COLORS.white;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(item.pos.x, item.pos.y, item.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+}
+
+function drawBullets() {
+  for (const bullet of state.bullets) {
+    ctx.fillStyle = bullet.color ?? COLORS.white;
+    ctx.beginPath();
+    ctx.arc(bullet.pos.x, bullet.pos.y, bullet.radius ?? 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  for (const bullet of state.enemyBullets) {
+    ctx.fillStyle = bullet.color ?? COLORS.red;
+    ctx.beginPath();
+    ctx.arc(bullet.pos.x, bullet.pos.y, bullet.radius ?? 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawEnergyBar() {
+  const barX = WIDTH - 190;
+  const barY = 20;
+  ctx.fillStyle = "rgba(40,45,80,0.9)";
+  ctx.fillRect(barX, barY, 160, 18);
+  const fill = ((state.energy / state.energyMax) * 152) | 0;
+  ctx.fillStyle = state.energy > state.energyMax * 0.5 ? COLORS.cyan : COLORS.orange;
+  ctx.fillRect(barX + 4, barY + 4, Math.max(0, fill - 8), 10);
+  ctx.fillStyle = COLORS.white;
+  ctx.font = "14px Segoe UI";
+  ctx.fillText("Energy", barX, barY - 4);
+}
+
+function drawHUD() {
+  ctx.fillStyle = COLORS.white;
+  ctx.font = "24px Segoe UI";
+  ctx.fillText(`Score: ${state.score}`, 15, 30);
+  ctx.fillText(`Level: ${state.level}`, 15, 60);
+  ctx.fillText(`Lives: ${state.lives}`, 15, 90);
+  ctx.font = "18px Segoe UI";
+  ctx.fillText(`Weapon: ${WEAPON_STAGES[state.weaponStage].name}`, 15, 120);
+  if (state.multiplier > 1) {
+    ctx.fillStyle = COLORS.orange;
+    ctx.fillText(`x${state.multiplier.toFixed(1)} multiplier`, 15, 145);
+  }
+  if (state.bonusMessageTimer > 0 && state.bonusMessage) {
+    ctx.fillStyle = COLORS.cyan;
+    ctx.fillText(state.bonusMessage, 15, 170);
+  }
+  drawEnergyBar();
+
+  ctx.fillStyle = COLORS.white;
+  ctx.font = "16px Segoe UI";
+  ctx.fillText("Move: WASD | Shoot: SPACE / LMB", 15, HEIGHT - 45);
+  ctx.fillText("Collect orbs for energy/shields/multipliers", 15, HEIGHT - 25);
+  ctx.fillText("Weapon evolves every 3 levels; shapes hint attacks.", 15, HEIGHT - 5);
+}
+
+function drawGameOver() {
+  ctx.fillStyle = "rgba(0,0,0,0.65)";
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  ctx.fillStyle = COLORS.white;
+  ctx.font = "48px Segoe UI";
+  ctx.textAlign = "center";
+  ctx.fillText("Game Over", WIDTH / 2, HEIGHT / 2 - 10);
+  ctx.font = "24px Segoe UI";
+  ctx.fillText("Press R to restart", WIDTH / 2, HEIGHT / 2 + 30);
+  ctx.textAlign = "start";
+}
+
+function updateTimers() {
+  if (state.energy < state.energyMax) {
+    state.energy = Math.min(state.energyMax, state.energy + ENERGY_REGEN);
+  }
+  if (state.multiplierTimer > 0) {
+    state.multiplierTimer -= 1;
+    if (state.multiplierTimer <= 0) state.multiplier = 1;
+  }
+  if (state.shieldTimer > 0) state.shieldTimer -= 1;
+  if (state.invincibleTimer > 0) state.invincibleTimer -= 1;
+  if (state.bulletCooldown > 0) state.bulletCooldown -= 1;
+  if (state.bonusMessageTimer > 0) state.bonusMessageTimer -= 1;
+}
+
+function updateGame() {
+  if (!state.gameOver) {
+    if (state.keys[" "] || state.isMouseDown) fireWeapon();
+
+    movePlayer();
+    moveEnemies();
+    updateBullets();
+
+    state.collectiblesTimer += 1;
+    if (state.collectiblesTimer >= state.collectiblesInterval) {
+      spawnCollectible();
+      state.collectiblesTimer = 0;
+    }
+
+    state.enemySpawnTimer += 1;
+    if (state.enemySpawnTimer >= state.enemySpawnInterval) {
+      spawnEnemy();
+      state.enemySpawnTimer = 0;
+    }
+
+    handleCollectibles();
+    handleEnemyHits();
+    checkCollisions();
+    updateTimers();
+    updateLevelProgress();
+  } else {
+    updateBullets();
+  }
+}
+
+function renderGame() {
+  ctx.clearRect(0, 0, WIDTH, HEIGHT);
+  drawCollectibles();
+  state.enemies.forEach(drawEnemyShape);
+  drawBullets();
+  drawPlayerAvatar();
+  drawHUD();
+  if (state.gameOver) drawGameOver();
+}
+
+function gameLoop() {
+  updateGame();
+  renderGame();
+  requestAnimationFrame(gameLoop);
+}
+
+// Input handling --------------------------------------------------------------
+window.addEventListener("keydown", (e) => {
+  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  state.keys[key] = true;
+  if (e.key === "r" || e.key === "R") {
+    if (state.gameOver) resetGame();
+  }
+  if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) {
+    e.preventDefault();
+  }
+});
+
+window.addEventListener("keyup", (e) => {
+  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  state.keys[key] = false;
+});
+
+canvas.addEventListener("mousedown", (e) => {
+  if (e.button === 0 && !state.gameOver) {
+    state.isMouseDown = true;
+    fireWeapon();
+  }
+});
+
+canvas.addEventListener("mouseup", (e) => {
+  if (e.button === 0) state.isMouseDown = false;
+});
+
+canvas.addEventListener("mouseleave", () => {
+  state.isMouseDown = false;
+});
+
+canvas.addEventListener("mousemove", (e) => {
+  const rect = canvas.getBoundingClientRect();
+  state.mousePos = {
+    x: ((e.clientX - rect.left) / rect.width) * WIDTH,
+    y: ((e.clientY - rect.top) / rect.height) * HEIGHT,
+  };
+});
+
+resetGame();
+gameLoop();
