@@ -2,6 +2,7 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const menuOverlay = document.getElementById("menu-overlay");
 const btnStartEndless = document.getElementById("btn-start-endless");
+const btnStartRogue = document.getElementById("btn-start-rogue");
 
 const WIDTH = canvas.width;
 const HEIGHT = canvas.height;
@@ -46,6 +47,26 @@ const ENEMY_TYPES = [
   { name: "zigzag", behavior: "zigzag", color: "#FF78D2", speed: 2.2, radius: 18, weight: 2 },
   { name: "shooter", behavior: "shooter", color: "#FFD890", speed: 1.8, radius: 20, weight: 2 },
   { name: "charger", behavior: "charger", color: "#78FFAA", speed: 2.0, radius: 18, weight: 2 },
+];
+
+// 试炼模式：更小体型与血量成长
+const ROGUE_ENEMY_TYPES = [
+  { name: "dash", behavior: "charger", color: "#FF8B8B", speed: 2.6, radius: 14, weight: 3, baseHp: 2 },
+  { name: "skirmish", behavior: "sneak", color: "#6EE4FF", speed: 2.8, radius: 13, weight: 3, baseHp: 2 },
+  { name: "zig", behavior: "zigzag", color: "#FF9BE6", speed: 2.4, radius: 13, weight: 2, baseHp: 3 },
+  { name: "gunner", behavior: "shooter", color: "#FFC97A", speed: 2.0, radius: 15, weight: 2, baseHp: 3 },
+  { name: "brute", behavior: "slow", color: "#7CFFB0", speed: 1.4, radius: 16, weight: 1, baseHp: 4 },
+];
+
+const ROGUE_ITEMS = [
+  { code: "rampage", label: "猛袭无敌", color: "#FF6B6B", glow: "#FFD1D1", icon: "burst", duration: 300, weight: 2 },
+  { code: "spread", label: "散射+1", color: "#75F3FF", glow: "#D7FFFF", icon: "arrow", weight: 2 },
+  { code: "life", label: "增命", color: "#7DFF86", glow: "#CFFFD2", icon: "heart", weight: 2 },
+  { code: "orbital", label: "环绕子弹", color: "#C586FF", glow: "#F1DEFF", icon: "orbit", weight: 2 },
+  { code: "ricochet", label: "反弹", color: "#FFB86B", glow: "#FFE5BE", icon: "bounce", duration: 600, weight: 2 },
+  { code: "blink", label: "闪现充能", color: "#6FB5FF", glow: "#D5E8FF", icon: "blink", weight: 1.5 },
+  { code: "timestop", label: "时间暂停", color: "#FFD278", glow: "#FFECCC", icon: "hourglass", duration: 180, weight: 1.5 },
+  { code: "power", label: "攻击+1", color: "#FFFFFF", glow: "#E1F1FF", icon: "power", weight: 2 },
 ];
 
 const LEVEL_BONUSES = [
@@ -99,10 +120,23 @@ const state = {
   paused: false,
   scene: "menu",
   mode: null,
+  modeShots: 1,
+  playerDamage: 1,
+  orbitals: [],
+  rampageTimer: 0,
+  ricochetTimer: 0,
+  timeStopTimer: 0,
+  pendingFrozenKills: [],
+  blinkCharges: 0,
+  maxBlinkCharges: 3,
+  modeElapsed: 0,
+  itemSpawnTimer: 0,
+  itemSpawnInterval: 160,
 };
 
 function resetGame() {
-  state.player = { x: WIDTH / 2, y: HEIGHT / 2, size: 32, speed: BASE_SPEED };
+  const isRogue = state.mode === "rogue";
+  state.player = { x: WIDTH / 2, y: HEIGHT / 2, size: isRogue ? 26 : 32, speed: BASE_SPEED - (isRogue ? 0.4 : 0) };
   state.energyMax = BASE_ENERGY_MAX;
   state.energy = state.energyMax;
   state.bullets = [];
@@ -113,10 +147,10 @@ function resetGame() {
   state.collectiblesTimer = 0;
   state.enemies = [];
   state.enemySpawnTimer = 0;
-  state.enemySpawnInterval = 210;
-  state.maxEnemies = 6;
+  state.enemySpawnInterval = isRogue ? 170 : 210;
+  state.maxEnemies = isRogue ? 8 : 6;
   state.score = 0;
-  state.lives = 4;
+  state.lives = isRogue ? 3 : 4;
   state.invincibleTimer = 0;
   state.shieldTimer = 0;
   state.multiplier = 1;
@@ -131,8 +165,21 @@ function resetGame() {
   state.gameOver = false;
   state.paused = false;
   state.isMouseDown = false;
-  for (let i = 0; i < 4; i += 1) {
-    spawnCollectible(true);
+  state.modeShots = 1;
+  state.playerDamage = 1;
+  state.orbitals = [];
+  state.rampageTimer = 0;
+  state.ricochetTimer = 0;
+  state.timeStopTimer = 0;
+  state.pendingFrozenKills = [];
+  state.blinkCharges = isRogue ? 1 : 0;
+  state.modeElapsed = 0;
+  state.itemSpawnTimer = 0;
+  state.itemSpawnInterval = 160;
+  if (!isRogue) {
+    for (let i = 0; i < 4; i += 1) {
+      spawnCollectible(true);
+    }
   }
 }
 
@@ -152,6 +199,27 @@ function startMode(mode) {
 
 if (btnStartEndless) {
   btnStartEndless.addEventListener("click", () => startMode("endless"));
+}
+if (btnStartRogue) {
+  btnStartRogue.addEventListener("click", () => startMode("rogue"));
+}
+
+function blinkToCursor() {
+  if (state.mode !== "rogue" || state.paused || state.gameOver) return;
+  if (state.blinkCharges <= 0) return;
+  const half = state.player.size / 2;
+  state.player.x = Math.min(Math.max(state.mousePos.x, half), WIDTH - half);
+  state.player.y = Math.min(Math.max(state.mousePos.y, half), HEIGHT - half);
+  state.blinkCharges -= 1;
+  spawnParticles({
+    x: state.player.x,
+    y: state.player.y,
+    color: COLORS.cyan,
+    count: 18,
+    speed: [1.2, 3.0],
+    size: [2, 4],
+    life: [14, 24],
+  });
 }
 
 function randRange(min, max) {
@@ -228,7 +296,21 @@ function updateParticles() {
   });
 }
 
+function updateOrbitals() {
+  if (state.mode !== "rogue" || !state.orbitals.length) return;
+  const baseRadius = state.player.size * 1.6;
+  state.orbitals.forEach((orb, idx) => {
+    const orbitRadius = baseRadius + idx * 2;
+    orb.angle = (orb.angle ?? Math.random() * Math.PI * 2) + (orb.speed ?? 0.05);
+    orb.pos = {
+      x: state.player.x + Math.cos(orb.angle) * orbitRadius,
+      y: state.player.y + Math.sin(orb.angle) * orbitRadius,
+    };
+  });
+}
+
 function spawnCollectible(initial = false) {
+  if (state.mode === "rogue") return;
   if (!initial && state.collectibles.length >= 6) return;
   const padding = 50;
   const x = randRange(padding, WIDTH - padding);
@@ -237,6 +319,19 @@ function spawnCollectible(initial = false) {
   state.collectibles.push({
     ...template,
     pos: { x, y },
+  });
+}
+
+function spawnRogueItem() {
+  if (state.collectibles.length >= 6) return;
+  const padding = 45;
+  const x = randRange(padding, WIDTH - padding);
+  const y = randRange(padding, HEIGHT - padding);
+  const template = chooseWeighted(ROGUE_ITEMS);
+  state.collectibles.push({
+    ...template,
+    pos: { x, y },
+    radius: 14,
   });
 }
 
@@ -258,10 +353,12 @@ function spawnEnemy() {
   else if (side === "left") pos = { x: -25, y: randRange(0, HEIGHT) };
   else pos = { x: WIDTH + 25, y: randRange(0, HEIGHT) };
 
-  const template = chooseWeighted(ENEMY_TYPES);
+  const template = state.mode === "rogue" ? chooseWeighted(ROGUE_ENEMY_TYPES) : chooseWeighted(ENEMY_TYPES);
+  const hpScale = state.mode === "rogue" ? Math.max(1, 1 + Math.floor(state.modeElapsed / 900)) : 1;
   state.enemies.push({
     ...template,
     pos,
+    hp: (template.baseHp ?? 1) * hpScale,
     zigzagDir: Math.random() < 0.5 ? -1 : 1,
     zigzagTimer: 0,
     shootCooldown: randRange(90, 140),
@@ -305,6 +402,7 @@ function movePlayer() {
 }
 
 function moveEnemies() {
+  if (state.mode === "rogue" && state.timeStopTimer > 0) return;
   for (const enemy of state.enemies) {
     const toPlayer = { x: state.player.x - enemy.pos.x, y: state.player.y - enemy.pos.y };
     const distance = Math.hypot(toPlayer.x, toPlayer.y) || 0.0001;
@@ -389,6 +487,10 @@ function shootEnemyBullet(enemy) {
 }
 
 function fireWeapon() {
+  if (state.mode === "rogue") {
+    fireRogueWeapon();
+    return;
+  }
   if (state.paused || state.scene !== "game") return;
   const profile = WEAPON_STAGES[state.weaponStage];
   if (!profile) return;
@@ -423,11 +525,62 @@ function fireWeapon() {
   state.energy -= profile.cost;
 }
 
+function fireRogueWeapon() {
+  if (state.paused || state.scene !== "game" || state.gameOver) return;
+  if (state.bulletCooldown > 0) return;
+  const direction = normalize({ x: state.mousePos.x - state.player.x, y: state.mousePos.y - state.player.y });
+  const baseDir = direction.x || direction.y ? direction : { x: 0, y: -1 };
+  const count = Math.max(1, state.modeShots);
+  const spread = count === 1 ? 0 : Math.min(55, 12 + count * 5);
+  const step = count === 1 ? 0 : spread / (count - 1);
+  const speed = state.bulletSpeed + 0.5;
+  for (let i = 0; i < count; i += 1) {
+    const offset = -spread / 2 + step * i;
+    const shotDir = rotateVector(baseDir, offset);
+    state.bullets.push({
+      pos: { x: state.player.x, y: state.player.y },
+      vel: { x: shotDir.x * speed, y: shotDir.y * speed },
+      radius: 4,
+      color: COLORS.white,
+      pierce: 0,
+      damage: state.playerDamage,
+      ricochet: state.ricochetTimer > 0,
+      bounced: false,
+    });
+  }
+  spawnParticles({
+    x: state.player.x,
+    y: state.player.y,
+    color: COLORS.cyan,
+    count: 6 + count,
+    speed: [0.6, 1.6],
+    size: [1, 2],
+    life: [8, 14],
+    spread: Math.PI / 2,
+  });
+  state.bulletCooldown = 10;
+}
+
 function updateBullets() {
   const arena = { x: -40, y: -40, w: WIDTH + 80, h: HEIGHT + 80 };
   state.bullets = state.bullets.filter((bullet) => {
     bullet.pos.x += bullet.vel.x;
     bullet.pos.y += bullet.vel.y;
+    if (state.mode === "rogue" && bullet.ricochet) {
+      let bounced = false;
+      if ((bullet.pos.x <= 0 && bullet.vel.x < 0) || (bullet.pos.x >= WIDTH && bullet.vel.x > 0)) {
+        bullet.vel.x *= -1;
+        bounced = true;
+      }
+      if ((bullet.pos.y <= 0 && bullet.vel.y < 0) || (bullet.pos.y >= HEIGHT && bullet.vel.y > 0)) {
+        bullet.vel.y *= -1;
+        bounced = true;
+      }
+      if (bounced) {
+        if (bullet.bounced) return false;
+        bullet.bounced = true;
+      }
+    }
     return (
       bullet.pos.x >= arena.x &&
       bullet.pos.x <= arena.x + arena.w &&
@@ -437,13 +590,16 @@ function updateBullets() {
   });
 
   state.enemyBullets = state.enemyBullets.filter((bullet) => {
-    bullet.pos.x += bullet.vel.x;
-    bullet.pos.y += bullet.vel.y;
+    if (!(state.mode === "rogue" && state.timeStopTimer > 0)) {
+      bullet.pos.x += bullet.vel.x;
+      bullet.pos.y += bullet.vel.y;
+    }
     return bullet.pos.x >= arena.x && bullet.pos.x <= arena.x + arena.w && bullet.pos.y >= arena.y && bullet.pos.y <= arena.y + arena.h;
   });
 }
 
 function handleEnemyHits() {
+  if (state.mode === "rogue") return handleRogueEnemyHits();
   const survivors = [];
   for (const enemy of state.enemies) {
     let hit = false;
@@ -481,7 +637,69 @@ function handleEnemyHits() {
   state.bullets = state.bullets.filter((b) => b.pos.x > -1000);
 }
 
+function handleRogueEnemyHits() {
+  const deadIds = new Set();
+  for (const enemy of state.enemies) {
+    if (enemy.pendingDeath || enemy.hp <= 0) continue;
+    // 环绕子弹伤害
+    for (const orb of state.orbitals) {
+      if (!orb.pos) continue;
+      const dist = Math.hypot(enemy.pos.x - orb.pos.x, enemy.pos.y - orb.pos.y);
+      if (dist < enemy.radius + 6) {
+        enemy.hp -= state.playerDamage;
+        if (enemy.hp <= 0) {
+          if (state.timeStopTimer > 0) {
+            if (!enemy.pendingDeath) state.pendingFrozenKills.push(enemy);
+            enemy.pendingDeath = true;
+          } else deadIds.add(enemy);
+          break;
+        }
+      }
+    }
+  }
+
+  for (const bullet of state.bullets) {
+    if (deadIds.size === state.enemies.length) break;
+    for (const enemy of state.enemies) {
+      if (enemy.pendingDeath || enemy.hp <= 0) continue;
+      const dist = Math.hypot(enemy.pos.x - bullet.pos.x, enemy.pos.y - bullet.pos.y);
+      if (dist < enemy.radius + (bullet.radius ?? 4)) {
+        enemy.hp -= bullet.damage ?? state.playerDamage;
+        if (bullet.pierce > 0) bullet.pierce -= 1;
+        else bullet.pos.x = -9999;
+        if (enemy.hp <= 0) {
+          if (state.timeStopTimer > 0) {
+            if (!enemy.pendingDeath) state.pendingFrozenKills.push(enemy);
+            enemy.pendingDeath = true;
+          } else deadIds.add(enemy);
+          break;
+        }
+      }
+    }
+  }
+
+  let survivors = [];
+  for (const enemy of state.enemies) {
+    if (enemy.hp <= 0 && !enemy.pendingDeath) {
+      spawnParticles({
+        x: enemy.pos.x,
+        y: enemy.pos.y,
+        color: enemy.color,
+        count: 14,
+        speed: [1.2, 3.4],
+        size: [2, 4],
+        life: [16, 28],
+      });
+      state.score += 12;
+    } else survivors.push(enemy);
+  }
+
+  state.enemies = survivors;
+  state.bullets = state.bullets.filter((b) => b.pos.x > -1000);
+}
+
 function handleCollectibles() {
+  if (state.mode === "rogue") return handleRogueItems();
   const { x, y, size } = state.player;
   const playerRadius = size / 2;
   const remain = [];
@@ -503,6 +721,58 @@ function handleCollectibles() {
       if (item.multiplier) {
         state.multiplier = item.multiplier;
         state.multiplierTimer = item.duration ?? 360;
+      }
+    } else remain.push(item);
+  }
+  state.collectibles = remain;
+}
+
+function handleRogueItems() {
+  const { x, y, size } = state.player;
+  const playerRadius = size / 2;
+  const remain = [];
+  for (const item of state.collectibles) {
+    const dist = Math.hypot(item.pos.x - x, item.pos.y - y);
+    if (dist < item.radius + playerRadius) {
+      spawnParticles({
+        x: item.pos.x,
+        y: item.pos.y,
+        color: item.color,
+        count: 12,
+        speed: [0.9, 2.4],
+        size: [2, 4],
+        life: [16, 28],
+      });
+      switch (item.code) {
+        case "rampage":
+          state.rampageTimer = Math.max(state.rampageTimer, item.duration ?? 300);
+          state.invincibleTimer = Math.max(state.invincibleTimer, item.duration ?? 300);
+          break;
+        case "spread":
+          state.modeShots = Math.min(state.modeShots + 1, 10);
+          break;
+        case "life":
+          state.lives += 1;
+          break;
+        case "orbital":
+          if (state.orbitals.length < 5) {
+            state.orbitals.push({ angle: Math.random() * Math.PI * 2, speed: 0.05 + state.orbitals.length * 0.01 });
+          } else {
+            state.orbitals.forEach((o) => (o.speed = (o.speed ?? 0.05) + 0.01));
+          }
+          break;
+        case "ricochet":
+          state.ricochetTimer = Math.max(state.ricochetTimer, item.duration ?? 600);
+          break;
+        case "blink":
+          state.blinkCharges = Math.min(state.maxBlinkCharges, state.blinkCharges + 1);
+          break;
+        case "timestop":
+          state.timeStopTimer = Math.max(state.timeStopTimer, item.duration ?? 180);
+          break;
+        case "power":
+          state.playerDamage += 1;
+          break;
       }
     } else remain.push(item);
   }
@@ -544,19 +814,36 @@ function checkCollisions() {
   for (const enemy of state.enemies) {
     const dist = Math.hypot(state.player.x - enemy.pos.x, state.player.y - enemy.pos.y);
     if (dist < playerRadius + enemy.radius) {
-      handlePlayerDamage();
+      if (state.mode === "rogue" && state.rampageTimer > 0) {
+        enemy.hp = 0;
+        enemy.pendingDeath = state.timeStopTimer > 0;
+        if (enemy.pendingDeath) state.pendingFrozenKills.push(enemy);
+        else spawnParticles({
+          x: enemy.pos.x,
+          y: enemy.pos.y,
+          color: enemy.color,
+          count: 14,
+          speed: [1.2, 3.4],
+          size: [2, 4],
+          life: [16, 28],
+        });
+      } else if (!(state.mode === "rogue" && state.timeStopTimer > 0)) {
+        handlePlayerDamage();
+      }
       break;
     }
   }
-  for (const bullet of state.enemyBullets) {
-    if (
-      bullet.pos.x >= state.player.x - playerRadius &&
-      bullet.pos.x <= state.player.x + playerRadius &&
-      bullet.pos.y >= state.player.y - playerRadius &&
-      bullet.pos.y <= state.player.y + playerRadius
-    ) {
-      bullet.pos.x = -9999;
-      handlePlayerDamage();
+  if (!(state.mode === "rogue" && state.timeStopTimer > 0)) {
+    for (const bullet of state.enemyBullets) {
+      if (
+        bullet.pos.x >= state.player.x - playerRadius &&
+        bullet.pos.x <= state.player.x + playerRadius &&
+        bullet.pos.y >= state.player.y - playerRadius &&
+        bullet.pos.y <= state.player.y + playerRadius
+      ) {
+        bullet.pos.x = -9999;
+        handlePlayerDamage();
+      }
     }
   }
   state.enemyBullets = state.enemyBullets.filter((b) => b.pos.x > -900);
@@ -784,15 +1071,103 @@ function drawPlayerAvatar() {
 function drawCollectibles() {
   for (const item of state.collectibles) {
     ctx.save();
-    ctx.shadowColor = item.color;
+    ctx.shadowColor = item.glow ?? item.color;
     ctx.shadowBlur = 12;
     ctx.fillStyle = item.color;
     ctx.strokeStyle = COLORS.white;
     ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(item.pos.x, item.pos.y, item.radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
+    if (item.icon === "hourglass") {
+      ctx.beginPath();
+      ctx.moveTo(item.pos.x - item.radius, item.pos.y - item.radius);
+      ctx.lineTo(item.pos.x + item.radius, item.pos.y - item.radius);
+      ctx.lineTo(item.pos.x - item.radius, item.pos.y + item.radius);
+      ctx.lineTo(item.pos.x + item.radius, item.pos.y + item.radius);
+      ctx.moveTo(item.pos.x - item.radius, item.pos.y - item.radius);
+      ctx.lineTo(item.pos.x + item.radius, item.pos.y + item.radius);
+      ctx.moveTo(item.pos.x + item.radius, item.pos.y - item.radius);
+      ctx.lineTo(item.pos.x - item.radius, item.pos.y + item.radius);
+      ctx.stroke();
+    } else if (item.icon === "heart") {
+      ctx.beginPath();
+      ctx.moveTo(item.pos.x, item.pos.y + item.radius * 0.7);
+      ctx.bezierCurveTo(
+        item.pos.x + item.radius,
+        item.pos.y,
+        item.pos.x + item.radius * 0.9,
+        item.pos.y - item.radius * 0.8,
+        item.pos.x,
+        item.pos.y - item.radius * 0.2
+      );
+      ctx.bezierCurveTo(
+        item.pos.x - item.radius * 0.9,
+        item.pos.y - item.radius * 0.8,
+        item.pos.x - item.radius,
+        item.pos.y,
+        item.pos.x,
+        item.pos.y + item.radius * 0.7
+      );
+      ctx.fill();
+      ctx.stroke();
+    } else if (item.icon === "orbit") {
+      ctx.beginPath();
+      ctx.arc(item.pos.x, item.pos.y, item.radius * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(item.pos.x, item.pos.y, item.radius, item.radius * 0.5, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    } else if (item.icon === "bounce") {
+      ctx.beginPath();
+      ctx.arc(item.pos.x, item.pos.y, item.radius, Math.PI, Math.PI * 1.5);
+      ctx.arc(item.pos.x, item.pos.y, item.radius, Math.PI * 1.5, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(item.pos.x, item.pos.y, item.radius * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (item.icon === "burst") {
+      ctx.beginPath();
+      for (let i = 0; i < 8; i += 1) {
+        const ang = (Math.PI * 2 * i) / 8;
+        const r = item.radius * (i % 2 === 0 ? 1 : 0.55);
+        ctx.lineTo(item.pos.x + Math.cos(ang) * r, item.pos.y + Math.sin(ang) * r);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else if (item.icon === "arrow") {
+      ctx.beginPath();
+      ctx.moveTo(item.pos.x - item.radius * 0.9, item.pos.y + item.radius * 0.6);
+      ctx.lineTo(item.pos.x, item.pos.y - item.radius);
+      ctx.lineTo(item.pos.x + item.radius * 0.9, item.pos.y + item.radius * 0.6);
+      ctx.lineTo(item.pos.x, item.pos.y + item.radius * 0.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else if (item.icon === "blink") {
+      ctx.beginPath();
+      ctx.moveTo(item.pos.x - item.radius, item.pos.y);
+      ctx.lineTo(item.pos.x, item.pos.y - item.radius * 0.8);
+      ctx.lineTo(item.pos.x + item.radius, item.pos.y);
+      ctx.lineTo(item.pos.x, item.pos.y + item.radius * 0.8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else if (item.icon === "power") {
+      ctx.beginPath();
+      ctx.moveTo(item.pos.x - item.radius * 0.3, item.pos.y - item.radius);
+      ctx.lineTo(item.pos.x + item.radius * 0.2, item.pos.y - item.radius * 0.2);
+      ctx.lineTo(item.pos.x - item.radius * 0.1, item.pos.y - item.radius * 0.2);
+      ctx.lineTo(item.pos.x + item.radius * 0.3, item.pos.y + item.radius);
+      ctx.lineTo(item.pos.x - item.radius * 0.2, item.pos.y + item.radius * 0.2);
+      ctx.lineTo(item.pos.x + item.radius * 0.1, item.pos.y + item.radius * 0.2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.arc(item.pos.x, item.pos.y, item.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
     ctx.restore();
   }
 }
@@ -818,6 +1193,19 @@ function drawBullets() {
     ctx.fill();
     ctx.restore();
   }
+  if (state.mode === "rogue") {
+    ctx.save();
+    ctx.shadowColor = COLORS.purple;
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = COLORS.purple;
+    for (const orb of state.orbitals) {
+      if (!orb.pos) continue;
+      ctx.beginPath();
+      ctx.arc(orb.pos.x, orb.pos.y, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
 }
 
 function drawEnergyBar() {
@@ -837,26 +1225,43 @@ function drawHUD() {
   ctx.fillStyle = COLORS.white;
   ctx.font = "24px Segoe UI";
   ctx.fillText(`Score: ${state.score}`, 15, 30);
-  ctx.fillText(`Level: ${state.level}`, 15, 60);
+  ctx.fillText(`Mode: ${state.mode === "rogue" ? "试炼" : "无尽"}`, 15, 60);
   ctx.fillText(`Lives: ${state.lives}`, 15, 90);
   ctx.font = "18px Segoe UI";
-  ctx.fillText(`Weapon: ${WEAPON_STAGES[state.weaponStage].name}`, 15, 120);
-  if (state.multiplier > 1) {
-    ctx.fillStyle = COLORS.orange;
-    ctx.fillText(`x${state.multiplier.toFixed(1)} multiplier`, 15, 145);
+  if (state.mode === "rogue") {
+    ctx.fillText(`伤害: ${state.playerDamage}`, 15, 120);
+    ctx.fillText(`散射数量: ${state.modeShots}`, 15, 144);
+    ctx.fillText(`环绕子弹: ${state.orbitals.length}/5`, 15, 168);
+    ctx.fillText(`闪现(F): ${state.blinkCharges}/${state.maxBlinkCharges}`, 15, 192);
+    if (state.ricochetTimer > 0) ctx.fillText(`反弹剩余: ${(state.ricochetTimer / 60).toFixed(1)}s`, 15, 216);
+    if (state.timeStopTimer > 0) ctx.fillText(`时间暂停: ${(state.timeStopTimer / 60).toFixed(1)}s`, 15, 240);
+    if (state.rampageTimer > 0) ctx.fillText(`猛袭: ${(state.rampageTimer / 60).toFixed(1)}s`, 15, 264);
+  } else {
+    ctx.fillText(`Level: ${state.level}`, 15, 120);
+    ctx.fillText(`Weapon: ${WEAPON_STAGES[state.weaponStage].name}`, 15, 144);
+    if (state.multiplier > 1) {
+      ctx.fillStyle = COLORS.orange;
+      ctx.fillText(`x${state.multiplier.toFixed(1)} multiplier`, 15, 168);
+    }
+    if (state.bonusMessageTimer > 0 && state.bonusMessage) {
+      ctx.fillStyle = COLORS.cyan;
+      ctx.fillText(state.bonusMessage, 15, 192);
+    }
+    ctx.fillStyle = COLORS.white;
+    drawEnergyBar();
   }
-  if (state.bonusMessageTimer > 0 && state.bonusMessage) {
-    ctx.fillStyle = COLORS.cyan;
-    ctx.fillText(state.bonusMessage, 15, 170);
-  }
-  drawEnergyBar();
 
   ctx.fillStyle = COLORS.white;
   ctx.font = "16px Segoe UI";
-  const infoY = HEIGHT - 65;
+  const infoY = HEIGHT - 85;
   ctx.fillText("Move: WASD | Shoot: SPACE / LMB", 15, infoY);
-  ctx.fillText("Collect orbs for energy/shields/multipliers", 15, infoY + 20);
-  ctx.fillText("Weapon evolves every 3 levels; shapes hint attacks.", 15, infoY + 40);
+  if (state.mode === "rogue") {
+    ctx.fillText("拾取道具：增伤/散射/无敌/闪现/时间暂停等", 15, infoY + 20);
+    ctx.fillText("闪现: F | 反弹/暂停/猛袭有时间限制", 15, infoY + 40);
+  } else {
+    ctx.fillText("Collect orbs for energy/shields/multipliers", 15, infoY + 20);
+    ctx.fillText("Weapon evolves every 3 levels; shapes hint attacks.", 15, infoY + 40);
+  }
   ctx.fillText("Pause/Resume: P", 15, infoY + 60);
 }
 
@@ -897,6 +1302,35 @@ function updateTimers() {
   if (state.invincibleTimer > 0) state.invincibleTimer -= 1;
   if (state.bulletCooldown > 0) state.bulletCooldown -= 1;
   if (state.bonusMessageTimer > 0) state.bonusMessageTimer -= 1;
+  if (state.rampageTimer > 0) state.rampageTimer -= 1;
+  if (state.ricochetTimer > 0) state.ricochetTimer -= 1;
+  if (state.timeStopTimer > 0) state.timeStopTimer -= 1;
+  if (state.timeStopTimer === 0 && state.pendingFrozenKills.length) flushFrozenDeaths();
+}
+
+function flushFrozenDeaths() {
+  if (!state.pendingFrozenKills.length) return;
+  const killSet = new Set(state.pendingFrozenKills);
+  const survivors = [];
+  for (const enemy of state.enemies) {
+    if (killSet.has(enemy)) {
+      spawnParticles({
+        x: enemy.pos.x,
+        y: enemy.pos.y,
+        color: enemy.color,
+        count: 14,
+        speed: [1.2, 3.4],
+        size: [2, 4],
+        life: [16, 28],
+      });
+      state.score += 12;
+    } else {
+      enemy.pendingDeath = false;
+      survivors.push(enemy);
+    }
+  }
+  state.enemies = survivors;
+  state.pendingFrozenKills = [];
 }
 
 function updateGame() {
@@ -912,25 +1346,43 @@ function updateGame() {
 
     movePlayer();
     moveEnemies();
+    updateOrbitals();
     updateBullets();
 
-    state.collectiblesTimer += 1;
-    if (state.collectiblesTimer >= state.collectiblesInterval) {
-      spawnCollectible();
-      state.collectiblesTimer = 0;
-    }
+    if (state.mode === "rogue") {
+      state.modeElapsed += 1;
+      state.itemSpawnTimer += 1;
+      if (state.itemSpawnTimer >= state.itemSpawnInterval) {
+        spawnRogueItem();
+        state.itemSpawnTimer = 0;
+      }
 
-    state.enemySpawnTimer += 1;
-    if (state.enemySpawnTimer >= state.enemySpawnInterval) {
-      spawnEnemy();
-      state.enemySpawnTimer = 0;
+      state.enemySpawnTimer += 1;
+      state.enemySpawnInterval = Math.max(90, 170 - Math.floor(state.modeElapsed / 600) * 10);
+      state.maxEnemies = Math.min(14, 8 + Math.floor(state.modeElapsed / 900));
+      if (state.enemySpawnTimer >= state.enemySpawnInterval) {
+        spawnEnemy();
+        state.enemySpawnTimer = 0;
+      }
+    } else {
+      state.collectiblesTimer += 1;
+      if (state.collectiblesTimer >= state.collectiblesInterval) {
+        spawnCollectible();
+        state.collectiblesTimer = 0;
+      }
+
+      state.enemySpawnTimer += 1;
+      if (state.enemySpawnTimer >= state.enemySpawnInterval) {
+        spawnEnemy();
+        state.enemySpawnTimer = 0;
+      }
     }
 
     handleCollectibles();
     handleEnemyHits();
     checkCollisions();
     updateTimers();
-    updateLevelProgress();
+    if (state.mode !== "rogue") updateLevelProgress();
   } else {
     updateBullets();
   }
@@ -963,6 +1415,7 @@ window.addEventListener("keydown", (e) => {
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   state.keys[key] = true;
   if (key === "p" && state.scene === "game" && !e.repeat) togglePause();
+  if (key === "f" && state.scene === "game" && state.mode === "rogue" && !e.repeat) blinkToCursor();
   if (e.key === "r" || e.key === "R") {
     if (state.gameOver) resetGame();
   }
@@ -1002,3 +1455,4 @@ canvas.addEventListener("mousemove", (e) => {
 initStarfield();
 resetGame();
 gameLoop();
+
