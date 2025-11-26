@@ -24,11 +24,16 @@ main {
   align-items: center;
 }
 
-canvas {
+.game-frame {
+  position: relative;
+  width: min(900px, 100%);
+}
+
+.game-frame canvas {
   border: 2px solid #1ef1ff;
   border-radius: 10px;
   background: radial-gradient(circle at 30% 20%, #1a1f4d, #080b1f 60%);
-  width: min(900px, 100%);
+  width: 100%;
   height: auto;
   touch-action: none;
 }
@@ -152,7 +157,7 @@ h2 {
 
 /* Mobile touch helpers */
 .touch-controls {
-  position: fixed;
+  position: absolute;
   right: 14px;
   bottom: 14px;
   display: flex;
@@ -203,7 +208,12 @@ body.fs-game .about {
   display: none;
 }
 
-body.fs-game canvas {
+body.fs-game .game-frame {
+  width: 100vw;
+  height: 100vh;
+}
+
+body.fs-game .game-frame canvas {
   width: 100vw !important;
   height: 100vh !important;
   border-radius: 0;
@@ -232,12 +242,13 @@ body.fs-game.fs-portrait main {
   height: 100vw;
 }
 
-body.fs-game.fs-portrait canvas {
+body.fs-game.fs-portrait .game-frame {
   width: 100vh !important;
   height: 100vw !important;
 }
 
 body.fs-game.fs-portrait .touch-controls {
   transform: rotate(-90deg);
+  transform-origin: center;
 }
 
