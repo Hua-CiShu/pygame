@@ -2,12 +2,19 @@ import { COLORS, BASE_SPEED, BASE_ENERGY_MAX, ENEMY_BULLET_SPEED, BASE_BULLET_SP
 import { spawnParticles } from "../core/particles.js";
 import { randRange, chooseWeighted, normalize, rotateVector } from "../core/utils.js";
 
+// 试炼模式也刷新无尽模式怪物，血量翻倍
 const ROGUE_ENEMY_TYPES = [
-  { name: "dash", behavior: "charger", color: "#FF8B8B", speed: 2.6, radius: 14, weight: 3, baseHp: 2 },
-  { name: "skirmish", behavior: "sneak", color: "#6EE4FF", speed: 2.8, radius: 13, weight: 3, baseHp: 2 },
-  { name: "zig", behavior: "zigzag", color: "#FF9BE6", speed: 2.4, radius: 13, weight: 2, baseHp: 3 },
-  { name: "gunner", behavior: "shooter", color: "#FFC97A", speed: 2.0, radius: 15, weight: 2, baseHp: 3 },
-  { name: "brute", behavior: "slow", color: "#7CFFB0", speed: 1.4, radius: 16, weight: 1, baseHp: 4 },
+  { name: "slow", behavior: "slow", color: COLORS.red, speed: 1.8, radius: 18, weight: 3.5, baseHp: 2 },
+  { name: "sneaky", behavior: "sneak", color: "#FF8C5A", speed: 2.6, radius: 15, weight: 3, baseHp: 2 },
+  { name: "zigzag", behavior: "zigzag", color: "#FF78D2", speed: 2.3, radius: 16, weight: 2.2, baseHp: 2 },
+  { name: "shooter", behavior: "shooter", color: "#FFD890", speed: 1.9, radius: 18, weight: 2, baseHp: 2 },
+  { name: "charger", behavior: "charger", color: "#78FFAA", speed: 2.1, radius: 16, weight: 2 },
+  { name: "splitter", behavior: "splitter", color: "#FFB2A6", speed: 1.8, radius: 18, weight: 2.4, baseHp: 2.4 },
+  { name: "brute", behavior: "brute", color: "#5CE0A5", speed: 1.4, radius: 20, weight: 1.6, baseHp: 6 },
+  { name: "commander", behavior: "commander", color: "#8BE7FF", speed: 1.3, radius: 20, weight: 1.8, baseHp: 4.4 },
+  { name: "toxic", behavior: "toxic", color: "#8CFF95", speed: 1.9, radius: 16, weight: 2.6, baseHp: 2.8 },
+  { name: "assassin", behavior: "assassin", color: "#A8B7FF", speed: 2.5, radius: 15, weight: 2.2, baseHp: 3 },
+  { name: "riftcaller", behavior: "rift", color: "#C07BFF", speed: 1.3, radius: 19, weight: 1.8, baseHp: 5 },
 ];
 
 const ROGUE_ITEMS = [
@@ -37,6 +44,8 @@ export function initState(state, difficulty = "normal") {
   state.enemyBullets = [];
   state.collectibles = [];
   state.enemies = [];
+  state.poisonZones = [];
+  state.rifts = [];
   state.enemySpawnTimer = 0;
   state.enemySpawnInterval = 170;
   state.maxEnemies = 8;
@@ -80,6 +89,9 @@ export function update(state, delta) {
     spawnEnemy(state);
     state.enemySpawnTimer = 0;
   }
+
+  updatePoisonZones(state, delta);
+  updateRifts(state, delta);
 
   if (state.keys[" "] || state.isMouseDown) fireWeapon(state);
   handleCollectibles(state);
@@ -169,6 +181,13 @@ function spawnEnemy(state) {
     dashDir: { x: 0, y: 0 },
     hitFlashTimer: 0,
     slowTimer: 0,
+    shieldHp: template.behavior === "commander" ? 4 : 0,
+    shieldCooldown: 200,
+    toxinTimer: 0,
+    phaseCooldown: template.behavior === "assassin" ? 220 : 0,
+    invisibleTimer: 0,
+    riftCooldown: template.behavior === "rift" ? randRange(140, 200) : 0,
+    childSplit: false,
   });
 }
 
@@ -249,11 +268,20 @@ function handleEnemyHits(state) {
       const dist = Math.hypot(enemy.pos.x - orb.pos.x, enemy.pos.y - orb.pos.y);
       if (dist < enemy.radius + 6) {
         if (!enemy.pendingDeath && enemy.hp > 0) {
-          enemy.hp -= state.playerDamage;
+          let dmg = state.playerDamage;
+          if (enemy.shieldHp && enemy.shieldHp > 0) {
+            enemy.shieldHp -= dmg;
+            dmg = enemy.shieldHp < 0 ? -enemy.shieldHp : 0;
+            enemy.shieldHp = Math.max(0, enemy.shieldHp);
+          }
+          if (dmg > 0) enemy.hp -= dmg;
           enemy.hitFlashTimer = 12;
           enemy.slowTimer = 18;
           if (enemy.hp <= 0) {
             handleRogueDeath(state, enemy, deadIds);
+            if (enemy.behavior === "splitter" && !enemy.childSplit) {
+              spawnSplitChildren(state, enemy);
+            }
             break;
           }
         }
@@ -269,7 +297,13 @@ function handleEnemyHits(state) {
       const dist = Math.hypot(enemy.pos.x - bullet.pos.x, enemy.pos.y - bullet.pos.y);
       if (dist < enemy.radius + (bullet.radius ?? 4)) {
         if (!enemy.pendingDeath && enemy.hp > 0) {
-          enemy.hp -= bullet.damage ?? state.playerDamage;
+          let dmg = bullet.damage ?? state.playerDamage;
+          if (enemy.shieldHp && enemy.shieldHp > 0) {
+            enemy.shieldHp -= dmg;
+            dmg = enemy.shieldHp < 0 ? -enemy.shieldHp : 0;
+            enemy.shieldHp = Math.max(0, enemy.shieldHp);
+          }
+          if (dmg > 0) enemy.hp -= dmg;
           enemy.hitFlashTimer = 12;
           enemy.slowTimer = 18;
         }
@@ -277,6 +311,9 @@ function handleEnemyHits(state) {
         else bullet.pos.x = -9999;
         if (enemy.hp <= 0) {
           handleRogueDeath(state, enemy, deadIds);
+          if (enemy.behavior === "splitter" && !enemy.childSplit) {
+            spawnSplitChildren(state, enemy);
+          }
           break;
         }
       }
@@ -300,6 +337,77 @@ function handleEnemyHits(state) {
   }
   state.enemies = survivors;
   state.bullets = state.bullets.filter((b) => b.pos.x > -1000);
+}
+
+function spawnSplitChildren(state, enemy) {
+  const count = 2;
+  for (let i = 0; i < count; i += 1) {
+    state.enemies.push({
+      name: "splitling",
+      behavior: "splitter",
+      color: enemy.color,
+      speed: enemy.baseSpeed * 1.2,
+      baseSpeed: enemy.baseSpeed * 1.2,
+      radius: Math.max(10, enemy.radius * 0.65),
+      pos: { x: enemy.pos.x + randRange(-10, 10), y: enemy.pos.y + randRange(-10, 10) },
+      hp: Math.max(1, (enemy.baseHp ?? 1) * 0.8),
+      zigzagDir: Math.random() < 0.5 ? -1 : 1,
+      zigzagTimer: 0,
+      shootCooldown: randRange(120, 160),
+      dashCooldown: randRange(140, 180),
+      state: "chase",
+      stateTimer: 0,
+      dashDir: { x: 0, y: 0 },
+      hitFlashTimer: 0,
+      slowTimer: 0,
+      childSplit: true,
+    });
+  }
+}
+
+function updatePoisonZones(state, delta) {
+  if (!state.poisonZones) state.poisonZones = [];
+  state.poisonZones = state.poisonZones.filter((z) => {
+    z.timer -= delta;
+    z.radius = Math.max(6, z.radius * (1 - 0.0005 * delta));
+    return z.timer > 0;
+  });
+}
+
+function updateRifts(state, delta) {
+  if (!state.rifts) state.rifts = [];
+  state.rifts = state.rifts.filter((r) => {
+    r.timer -= delta;
+    r.spawnTimer += delta;
+    if (r.spawnTimer >= 90) {
+      spawnRiftMinion(state, r);
+      r.spawnTimer = 0;
+    }
+    return r.timer > 0;
+  });
+}
+
+function spawnRiftMinion(state, rift) {
+  state.enemies.push({
+    name: "riftling",
+    behavior: "zigzag",
+    color: "#C07BFF",
+    speed: 2.0,
+    baseSpeed: 2.0,
+    radius: 12,
+    pos: { x: rift.x + randRange(-8, 8), y: rift.y + randRange(-8, 8) },
+    hp: 2,
+    zigzagDir: Math.random() < 0.5 ? -1 : 1,
+    zigzagTimer: 0,
+    shootCooldown: randRange(130, 180),
+    dashCooldown: randRange(130, 170),
+    state: "chase",
+    stateTimer: 0,
+    dashDir: { x: 0, y: 0 },
+    hitFlashTimer: 0,
+    slowTimer: 0,
+    childSplit: true,
+  });
 }
 
 export function drawHUD(state, ctx) {
