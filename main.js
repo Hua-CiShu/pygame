@@ -29,6 +29,11 @@ function setFullscreenClass(active) {
   document.body.classList.toggle("fs-game", !!active);
 }
 
+function updatePortraitFlag() {
+  const isPortrait = window.matchMedia("(orientation: portrait)").matches;
+  document.body.classList.toggle("fs-portrait", !!document.fullscreenElement && isPortrait);
+}
+
 function hideMenu() {
   if (menuOverlay) menuOverlay.style.display = "none";
 }
@@ -64,6 +69,7 @@ function wireInput() {
       if (document.fullscreenElement) {
         document.exitFullscreen?.();
         setFullscreenClass(false);
+        updatePortraitFlag();
       } else {
         const target = canvas || document.documentElement;
         const req =
@@ -71,15 +77,23 @@ function wireInput() {
           target.webkitRequestFullscreen ||
           target.msRequestFullscreen ||
           target.mozRequestFullScreen;
-        if (req) req.call(target).catch?.(() => setFullscreenClass(true));
+        if (req) req.call(target).then?.(() => {
+          screen.orientation?.lock?.("landscape").catch(() => {});
+        }).catch?.(() => setFullscreenClass(true));
         else setFullscreenClass(true);
+        updatePortraitFlag();
       }
     };
     btnTouchFullscreen.addEventListener("click", requestFull);
     btnTouchFullscreen.addEventListener("touchstart", (e) => { e.preventDefault(); requestFull(); }, { passive: false });
   }
 
-  document.addEventListener("fullscreenchange", () => setFullscreenClass(!!document.fullscreenElement));
+  document.addEventListener("fullscreenchange", () => {
+    setFullscreenClass(!!document.fullscreenElement);
+    updatePortraitFlag();
+  });
+  window.addEventListener("resize", updatePortraitFlag);
+  window.addEventListener("orientationchange", updatePortraitFlag);
 }
 
 function bootstrap() {
