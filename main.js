@@ -15,6 +15,7 @@ import {
   triggerBlink,
   restartGame,
 } from "./game.js";
+import { initAudio, unlockAudio, loadSound } from "./core/sound.js";
 
 const canvas = document.getElementById("game");
 const gameFrame = document.getElementById("game-frame");
@@ -51,11 +52,11 @@ function wireMenu() {
 function wireInput() {
   window.addEventListener("keydown", handleKeyDown);
   window.addEventListener("keyup", handleKeyUp);
-  canvas.addEventListener("mousedown", handleMouseDown);
+  canvas.addEventListener("mousedown", (e) => { unlockAudio(); handleMouseDown(e); });
   canvas.addEventListener("mouseup", handleMouseUp);
   canvas.addEventListener("mouseleave", handleMouseLeave);
   canvas.addEventListener("mousemove", handleMouseMove);
-  canvas.addEventListener("touchstart", handleTouchStart, { passive: false });
+  canvas.addEventListener("touchstart", (e) => { unlockAudio(); handleTouchStart(e); }, { passive: false });
   canvas.addEventListener("touchmove", handleTouchMove, { passive: false });
   canvas.addEventListener("touchend", handleTouchEnd, { passive: false });
   canvas.addEventListener("touchcancel", handleTouchEnd, { passive: false });
@@ -105,6 +106,8 @@ function wireInput() {
 }
 
 function bootstrap() {
+  initAudio();
+  loadSound("shoot", "./assets/sfx/shoot1.wav");
   initGame(canvas);
   wireMenu();
   wireInput();

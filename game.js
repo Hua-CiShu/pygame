@@ -760,16 +760,17 @@ function drawBullets() {
   for (const bullet of state.bullets) {
     ctx.save();
     const r = bullet.radius ?? 4;
-    const grad = ctx.createRadialGradient(bullet.pos.x, bullet.pos.y, r * 0.2, bullet.pos.x, bullet.pos.y, r * 1.1);
-    grad.addColorStop(0, "rgba(255,255,255,0.9)");
-    grad.addColorStop(1, bullet.color ?? COLORS.cyan);
+    const grad = ctx.createRadialGradient(bullet.pos.x, bullet.pos.y, r * 0.15, bullet.pos.x, bullet.pos.y, r * 1.4);
+    grad.addColorStop(0, "rgba(255,255,255,0.95)");
+    grad.addColorStop(0.45, (bullet.color ?? COLORS.cyan));
+    grad.addColorStop(1, "rgba(0,0,0,0)");
     ctx.shadowColor = bullet.glow ?? bullet.color ?? COLORS.cyan;
-    ctx.shadowBlur = 12;
+    ctx.shadowBlur = 18;
     ctx.fillStyle = grad;
-    ctx.strokeStyle = "rgba(255,255,255,0.6)";
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = bullet.glow ?? "rgba(255,255,255,0.8)";
+    ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.arc(bullet.pos.x, bullet.pos.y, r, 0, Math.PI * 2);
+    ctx.arc(bullet.pos.x, bullet.pos.y, r * 1.05, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.restore();

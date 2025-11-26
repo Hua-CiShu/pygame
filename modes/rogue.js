@@ -1,6 +1,7 @@
 import { COLORS, BASE_SPEED, BASE_ENERGY_MAX, ENEMY_BULLET_SPEED, BASE_BULLET_SPEED } from "../core/constants.js";
 import { spawnParticles } from "../core/particles.js";
 import { randRange, chooseWeighted, normalize, rotateVector } from "../core/utils.js";
+import { play } from "../core/sound.js";
 
 // 试炼模式也刷新无尽模式怪物，血量翻倍
 const ROGUE_ENEMY_TYPES = [
@@ -132,6 +133,7 @@ function fireWeapon(state) {
     life: [8, 14],
     spread: Math.PI / 2,
   });
+  play("shoot", { volume: 0.35, detune: Math.random() * 30 - 15 });
   state.bulletCooldown = 10;
 }
 

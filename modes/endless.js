@@ -1,12 +1,13 @@
 import { COLORS, BASE_SPEED, BASE_ENERGY_MAX, ENERGY_REGEN, ENEMY_BULLET_SPEED, LEVEL_SCORE_STEP, BASE_BULLET_SPEED } from "../core/constants.js";
 import { spawnParticles } from "../core/particles.js";
+import { play } from "../core/sound.js";
 import { randRange, chooseWeighted, normalize, rotateVector } from "../core/utils.js";
 
 const WEAPON_STAGES = {
-  1: { name: "Pulse Shot", angles: [0], color: COLORS.white, radius: 4, pierce: 0, cost: 12, cooldown: 10, speedBonus: 0 },
-  2: { name: "Twin Fangs", angles: [-10, 10], color: COLORS.cyan, radius: 4, pierce: 0, cost: 16, cooldown: 11, speedBonus: 0.5 },
-  3: { name: "Tri Nova", angles: [-18, 0, 18], color: COLORS.orange, radius: 5, pierce: 1, cost: 20, cooldown: 13, speedBonus: 0.8 },
-  4: { name: "Vortex Lance", angles: [-25, -8, 8, 25], color: COLORS.purple, radius: 5, pierce: 1, cost: 24, cooldown: 15, speedBonus: 1.1 },
+  1: { name: "Pulse Shot", angles: [0], color: COLORS.cyan, radius: 4, pierce: 0, cost: 12, cooldown: 10, speedBonus: 0, glow: COLORS.cyan },
+  2: { name: "Twin Fangs", angles: [-10, 10], color: COLORS.cyan, radius: 4, pierce: 0, cost: 16, cooldown: 11, speedBonus: 0.5, glow: COLORS.cyan },
+  3: { name: "Tri Nova", angles: [-18, 0, 18], color: COLORS.orange, radius: 5, pierce: 1, cost: 20, cooldown: 13, speedBonus: 0.8, glow: COLORS.orange },
+  4: { name: "Vortex Lance", angles: [-25, -8, 8, 25], color: COLORS.purple, radius: 5, pierce: 1, cost: 24, cooldown: 15, speedBonus: 1.1, glow: COLORS.purple },
 };
 const MAX_WEAPON_STAGE = Math.max(...Object.keys(WEAPON_STAGES).map(Number));
 
@@ -136,6 +137,8 @@ function fireWeapon(state) {
     life: [8, 16],
     spread: Math.PI / 2,
   });
+
+  play("shoot", { volume: 0.35, detune: Math.random() * 30 - 15 });
 
   state.bulletCooldown = profile.cooldown;
   state.energy -= profile.cost;
