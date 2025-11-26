@@ -30,6 +30,7 @@ canvas {
   background: radial-gradient(circle at 30% 20%, #1a1f4d, #080b1f 60%);
   width: min(900px, 100%);
   height: auto;
+  touch-action: none;
 }
 
 .hud,
@@ -157,7 +158,7 @@ h2 {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  z-index: 20;
+  z-index: 50;
 }
 
 .touch-btn {
@@ -216,5 +217,27 @@ body.fs-game .menu-overlay {
 body.fs-game .touch-controls {
   right: 12px;
   bottom: 12px;
+}
+
+/* Portrait fullscreen fallback: rotate to landscape-like view */
+body.fs-game.fs-portrait {
+  width: 100vh;
+  height: 100vw;
+  transform: rotate(90deg);
+  transform-origin: center;
+}
+
+body.fs-game.fs-portrait main {
+  width: 100vh;
+  height: 100vw;
+}
+
+body.fs-game.fs-portrait canvas {
+  width: 100vh !important;
+  height: 100vw !important;
+}
+
+body.fs-game.fs-portrait .touch-controls {
+  transform: rotate(-90deg);
 }
 
