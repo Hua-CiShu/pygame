@@ -3,6 +3,8 @@ const ctx = canvas.getContext("2d");
 const menuOverlay = document.getElementById("menu-overlay");
 const btnStartEndless = document.getElementById("btn-start-endless");
 const btnStartRogue = document.getElementById("btn-start-rogue");
+const btnStartRogueEasy = document.getElementById("btn-start-rogue-easy");
+const btnStartRogueHard = document.getElementById("btn-start-rogue-hard");
 
 const WIDTH = canvas.width;
 const HEIGHT = canvas.height;
@@ -69,6 +71,12 @@ const ROGUE_ITEMS = [
   { code: "power", label: "攻击+1", color: "#FFFFFF", glow: "#E1F1FF", icon: "power", weight: 2 },
 ];
 
+const ROGUE_DIFFICULTIES = {
+  easy: { key: "easy", label: "简单", itemInterval: 200 },
+  normal: { key: "normal", label: "标准", itemInterval: 260 },
+  hard: { key: "hard", label: "艰难", itemInterval: 320 },
+};
+
 const LEVEL_BONUSES = [
   { label: "Move speed +0.4", code: "speed" },
   { label: "Max enemies +1", code: "enemy_cap" },
@@ -120,6 +128,7 @@ const state = {
   paused: false,
   scene: "menu",
   mode: null,
+  modeDifficulty: "normal",
   modeShots: 1,
   playerDamage: 1,
   orbitals: [],
@@ -175,7 +184,8 @@ function resetGame() {
   state.blinkCharges = isRogue ? 1 : 0;
   state.modeElapsed = 0;
   state.itemSpawnTimer = 0;
-  state.itemSpawnInterval = 160;
+  const diff = isRogue ? ROGUE_DIFFICULTIES[state.modeDifficulty] ?? ROGUE_DIFFICULTIES.normal : null;
+  state.itemSpawnInterval = diff ? diff.itemInterval : 160;
   if (!isRogue) {
     for (let i = 0; i < 4; i += 1) {
       spawnCollectible(true);
@@ -190,8 +200,11 @@ function togglePause() {
   state.keys[" "] = false;
 }
 
-function startMode(mode) {
+function startMode(mode, options = {}) {
   state.mode = mode;
+  if (mode === "rogue") {
+    state.modeDifficulty = options.difficulty ?? "normal";
+  }
   state.scene = "game";
   resetGame();
   if (menuOverlay) menuOverlay.style.display = "none";
@@ -202,6 +215,12 @@ if (btnStartEndless) {
 }
 if (btnStartRogue) {
   btnStartRogue.addEventListener("click", () => startMode("rogue"));
+}
+if (btnStartRogueEasy) {
+  btnStartRogueEasy.addEventListener("click", () => startMode("rogue", { difficulty: "easy" }));
+}
+if (btnStartRogueHard) {
+  btnStartRogueHard.addEventListener("click", () => startMode("rogue", { difficulty: "hard" }));
 }
 
 function blinkToCursor() {
@@ -1225,7 +1244,11 @@ function drawHUD() {
   ctx.fillStyle = COLORS.white;
   ctx.font = "24px Segoe UI";
   ctx.fillText(`Score: ${state.score}`, 15, 30);
-  ctx.fillText(`Mode: ${state.mode === "rogue" ? "试炼" : "无尽"}`, 15, 60);
+  const modeLabel =
+    state.mode === "rogue"
+      ? `试炼（${ROGUE_DIFFICULTIES[state.modeDifficulty]?.label ?? "标准"}）`
+      : "无尽";
+  ctx.fillText(`Mode: ${modeLabel}`, 15, 60);
   ctx.fillText(`Lives: ${state.lives}`, 15, 90);
   ctx.font = "18px Segoe UI";
   if (state.mode === "rogue") {
