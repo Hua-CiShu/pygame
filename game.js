@@ -957,6 +957,10 @@ export function triggerBlink() {
   blinkToCursor();
 }
 
+export function restartGame() {
+  resetGame();
+}
+
 export function handleKeyDown(e) {
   const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
   state.keys[key] = true;
