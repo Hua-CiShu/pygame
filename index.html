@@ -16,7 +16,15 @@
           you can! Need to step away? Press P to pause/resume.
         </p>
       </section>
-      <canvas id="game" width="900" height="600"></canvas>
+      <div id="game-frame" class="game-frame">
+        <canvas id="game" width="900" height="600"></canvas>
+        <div class="touch-controls">
+          <button id="btn-touch-pause" class="touch-btn">暂停</button>
+          <button id="btn-touch-blink" class="touch-btn">闪现</button>
+          <button id="btn-touch-restart" class="touch-btn">重来</button>
+          <button id="btn-touch-fullscreen" class="touch-btn">全屏</button>
+        </div>
+      </div>
       <section class="about">
         <h2>About this port</h2>
         <p>
@@ -47,11 +55,6 @@
           </div>
         </div>
       </div>
-    </div>
-    <div class="touch-controls">
-      <button id="btn-touch-pause" class="touch-btn">暂停</button>
-      <button id="btn-touch-blink" class="touch-btn">闪现</button>
-      <button id="btn-touch-fullscreen" class="touch-btn">全屏</button>
     </div>
     <script type="module" src="main.js"></script>
   </body>
