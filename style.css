@@ -182,3 +182,39 @@ h2 {
   }
 }
 
+/* Fullscreen game view (canvas-only, like video full screen) */
+body.fs-game {
+  margin: 0;
+  padding: 0;
+  background: #05060f;
+  overflow: hidden;
+}
+
+body.fs-game main {
+  width: 100vw;
+  max-width: none;
+  padding: 0;
+  margin: 0;
+}
+
+body.fs-game .hud,
+body.fs-game .about {
+  display: none;
+}
+
+body.fs-game canvas {
+  width: 100vw !important;
+  height: 100vh !important;
+  border-radius: 0;
+  border: none;
+}
+
+body.fs-game .menu-overlay {
+  inset: 0;
+}
+
+body.fs-game .touch-controls {
+  right: 12px;
+  bottom: 12px;
+}
+
