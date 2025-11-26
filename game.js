@@ -5,6 +5,9 @@ const btnStartEndless = document.getElementById("btn-start-endless");
 const btnStartRogue = document.getElementById("btn-start-rogue");
 const btnStartRogueEasy = document.getElementById("btn-start-rogue-easy");
 const btnStartRogueHard = document.getElementById("btn-start-rogue-hard");
+let lastTime = performance.now();
+let delta = 1;
+let deltaMs = 16.67;
 
 const WIDTH = canvas.width;
 const HEIGHT = canvas.height;
@@ -67,7 +70,7 @@ const ROGUE_ITEMS = [
   { code: "orbital", label: "环绕子弹", color: "#C586FF", glow: "#F1DEFF", icon: "orbit", weight: 2 },
   { code: "ricochet", label: "反弹", color: "#FFB86B", glow: "#FFE5BE", icon: "bounce", duration: 600, weight: 2 },
   { code: "blink", label: "闪现充能", color: "#6FB5FF", glow: "#D5E8FF", icon: "blink", weight: 1.5 },
-  { code: "timestop", label: "时间暂停", color: "#FFD278", glow: "#FFECCC", icon: "hourglass", duration: 180, weight: 1.5 },
+  { code: "timestop", label: "时间暂停", color: "#FFD278", glow: "#FFECCC", icon: "hourglass", duration: 360, weight: 1.5 },
   { code: "power", label: "攻击+1", color: "#FFFFFF", glow: "#E1F1FF", icon: "power", weight: 2 },
 ];
 
@@ -141,6 +144,11 @@ const state = {
   modeElapsed: 0,
   itemSpawnTimer: 0,
   itemSpawnInterval: 160,
+  effectBanner: { text: "", color: COLORS.white, timer: 0 },
+  dt: 1,
+  dtMs: 16.67,
+  shakeTimer: 0,
+  shakeMag: 0,
 };
 
 function resetGame() {
@@ -186,6 +194,11 @@ function resetGame() {
   state.itemSpawnTimer = 0;
   const diff = isRogue ? ROGUE_DIFFICULTIES[state.modeDifficulty] ?? ROGUE_DIFFICULTIES.normal : null;
   state.itemSpawnInterval = diff ? diff.itemInterval : 160;
+  state.effectBanner = { text: "", color: COLORS.white, timer: 0 };
+  state.dt = 1;
+  state.dtMs = 16.67;
+  state.shakeTimer = 0;
+  state.shakeMag = 0;
   if (!isRogue) {
     for (let i = 0; i < 4; i += 1) {
       spawnCollectible(true);
@@ -241,6 +254,15 @@ function blinkToCursor() {
   });
 }
 
+function setEffectBanner(text, color = COLORS.white, duration = 120) {
+  state.effectBanner = { text, color, timer: duration };
+}
+
+function triggerShake(duration = 18, magnitude = 5) {
+  state.shakeTimer = duration;
+  state.shakeMag = magnitude;
+}
+
 function randRange(min, max) {
   return Math.random() * (max - min) + min;
 }
@@ -269,7 +291,7 @@ function initStarfield() {
 
 function updateStarfield() {
   for (const star of state.backgroundStars) {
-    star.y += star.speed;
+    star.y += star.speed * delta;
     if (star.y > HEIGHT + 10) {
       star.y = -10;
       star.x = Math.random() * WIDTH;
@@ -304,13 +326,13 @@ function spawnParticles({
 
 function updateParticles() {
   state.particles = state.particles.filter((p) => {
-    p.pos.x += p.vel.x;
-    p.pos.y += p.vel.y;
-    p.vel.x *= 0.96;
-    p.vel.y *= 0.96;
-    p.radius *= 0.985;
-    p.life -= 1;
-    p.alpha -= p.decay;
+    p.pos.x += p.vel.x * delta;
+    p.pos.y += p.vel.y * delta;
+    p.vel.x *= 1 - (1 - 0.96) * delta;
+    p.vel.y *= 1 - (1 - 0.96) * delta;
+    p.radius *= 1 - (1 - 0.985) * delta;
+    p.life -= 1 * delta;
+    p.alpha -= p.decay * delta;
     return p.life > 0 && p.alpha > 0 && p.radius > 0.1;
   });
 }
@@ -320,7 +342,7 @@ function updateOrbitals() {
   const baseRadius = state.player.size * 1.6;
   state.orbitals.forEach((orb, idx) => {
     const orbitRadius = baseRadius + idx * 2;
-    orb.angle = (orb.angle ?? Math.random() * Math.PI * 2) + (orb.speed ?? 0.05);
+    orb.angle = (orb.angle ?? Math.random() * Math.PI * 2) + (orb.speed ?? 0.05) * delta;
     orb.pos = {
       x: state.player.x + Math.cos(orb.angle) * orbitRadius,
       y: state.player.y + Math.sin(orb.angle) * orbitRadius,
@@ -377,6 +399,7 @@ function spawnEnemy() {
   state.enemies.push({
     ...template,
     pos,
+    baseSpeed: template.speed,
     hp: (template.baseHp ?? 1) * hpScale,
     zigzagDir: Math.random() < 0.5 ? -1 : 1,
     zigzagTimer: 0,
@@ -385,6 +408,8 @@ function spawnEnemy() {
     state: "chase",
     stateTimer: 0,
     dashDir: { x: 0, y: 0 },
+    hitFlashTimer: 0,
+    slowTimer: 0,
   });
 }
 
@@ -407,10 +432,10 @@ function rotateVector(vec, angleDeg) {
 function movePlayer() {
   let dx = 0;
   let dy = 0;
-  if (state.keys["a"] || state.keys["ArrowLeft"]) dx -= state.player.speed;
-  if (state.keys["d"] || state.keys["ArrowRight"]) dx += state.player.speed;
-  if (state.keys["w"] || state.keys["ArrowUp"]) dy -= state.player.speed;
-  if (state.keys["s"] || state.keys["ArrowDown"]) dy += state.player.speed;
+  if (state.keys["a"] || state.keys["ArrowLeft"]) dx -= state.player.speed * delta;
+  if (state.keys["d"] || state.keys["ArrowRight"]) dx += state.player.speed * delta;
+  if (state.keys["w"] || state.keys["ArrowUp"]) dy -= state.player.speed * delta;
+  if (state.keys["s"] || state.keys["ArrowDown"]) dy += state.player.speed * delta;
 
   if (dx && dy) {
     dx *= Math.SQRT1_2;
@@ -426,36 +451,41 @@ function moveEnemies() {
     const toPlayer = { x: state.player.x - enemy.pos.x, y: state.player.y - enemy.pos.y };
     const distance = Math.hypot(toPlayer.x, toPlayer.y) || 0.0001;
     const baseDir = { x: toPlayer.x / distance, y: toPlayer.y / distance };
+    const speedFactor = enemy.slowTimer > 0 ? 0.55 : 1;
+    const effSpeed = (enemy.baseSpeed ?? enemy.speed) * speedFactor;
 
     switch (enemy.behavior) {
       case "slow":
-        enemy.pos.x += baseDir.x * enemy.speed;
-        enemy.pos.y += baseDir.y * enemy.speed;
+        enemy.pos.x += baseDir.x * effSpeed * delta;
+        enemy.pos.y += baseDir.y * effSpeed * delta;
         break;
       case "sneak": {
         const perpendicular = { x: -baseDir.y, y: baseDir.x };
-        enemy.pos.x += (baseDir.x * 0.7 + perpendicular.x * 0.35) * enemy.speed;
-        enemy.pos.y += (baseDir.y * 0.7 + perpendicular.y * 0.35) * enemy.speed;
+        enemy.pos.x += (baseDir.x * 0.7 + perpendicular.x * 0.35) * effSpeed * delta;
+        enemy.pos.y += (baseDir.y * 0.7 + perpendicular.y * 0.35) * effSpeed * delta;
         break;
       }
       case "zigzag": {
-        enemy.zigzagTimer += 1;
-        if (enemy.zigzagTimer % 45 === 0) enemy.zigzagDir *= -1;
+        enemy.zigzagTimer += 1 * delta;
+        if (enemy.zigzagTimer >= 45) {
+          enemy.zigzagTimer -= 45;
+          enemy.zigzagDir *= -1;
+        }
         const sideways = { x: -baseDir.y * 0.6 * enemy.zigzagDir, y: baseDir.x * 0.6 * enemy.zigzagDir };
-        enemy.pos.x += (baseDir.x + sideways.x) * enemy.speed;
-        enemy.pos.y += (baseDir.y + sideways.y) * enemy.speed;
+        enemy.pos.x += (baseDir.x + sideways.x) * effSpeed * delta;
+        enemy.pos.y += (baseDir.y + sideways.y) * effSpeed * delta;
         break;
       }
       case "shooter": {
         const preferred = 220;
         if (distance > preferred + 20) {
-          enemy.pos.x += baseDir.x * enemy.speed;
-          enemy.pos.y += baseDir.y * enemy.speed;
+          enemy.pos.x += baseDir.x * effSpeed * delta;
+          enemy.pos.y += baseDir.y * effSpeed * delta;
         } else if (distance < preferred - 30) {
-          enemy.pos.x -= baseDir.x * enemy.speed;
-          enemy.pos.y -= baseDir.y * enemy.speed;
+          enemy.pos.x -= baseDir.x * effSpeed * delta;
+          enemy.pos.y -= baseDir.y * effSpeed * delta;
         }
-        enemy.shootCooldown -= 1;
+        enemy.shootCooldown -= 1 * delta;
         if (enemy.shootCooldown <= 0) {
           shootEnemyBullet(enemy);
           enemy.shootCooldown = randRange(110, 150);
@@ -463,27 +493,27 @@ function moveEnemies() {
         break;
       }
       case "charger": {
-        enemy.dashCooldown -= 1;
+        enemy.dashCooldown -= 1 * delta;
         if (enemy.state === "chase") {
-          enemy.pos.x += baseDir.x * enemy.speed;
-          enemy.pos.y += baseDir.y * enemy.speed;
+          enemy.pos.x += baseDir.x * effSpeed * delta;
+          enemy.pos.y += baseDir.y * effSpeed * delta;
           if (enemy.dashCooldown <= 0) {
             enemy.state = "windup";
             enemy.stateTimer = 30;
           }
         } else if (enemy.state === "windup") {
-          enemy.stateTimer -= 1;
-          enemy.pos.x += randRange(-1, 1);
-          enemy.pos.y += randRange(-1, 1);
+          enemy.stateTimer -= 1 * delta;
+          enemy.pos.x += randRange(-1, 1) * delta;
+          enemy.pos.y += randRange(-1, 1) * delta;
           if (enemy.stateTimer <= 0) {
             enemy.state = "dash";
             enemy.stateTimer = 20;
             enemy.dashDir = { ...baseDir };
           }
         } else if (enemy.state === "dash") {
-          enemy.pos.x += enemy.dashDir.x * enemy.speed * 4.5;
-          enemy.pos.y += enemy.dashDir.y * enemy.speed * 4.5;
-          enemy.stateTimer -= 1;
+          enemy.pos.x += enemy.dashDir.x * effSpeed * 4.5 * delta;
+          enemy.pos.y += enemy.dashDir.y * effSpeed * 4.5 * delta;
+          enemy.stateTimer -= 1 * delta;
           if (enemy.stateTimer <= 0) {
             enemy.state = "chase";
             enemy.dashCooldown = randRange(120, 170);
@@ -525,6 +555,7 @@ function fireWeapon() {
       vel: { x: shotDir.x * (state.bulletSpeed + profile.speedBonus), y: shotDir.y * (state.bulletSpeed + profile.speedBonus) },
       radius: profile.radius,
       color: profile.color,
+      glow: profile.color,
       pierce: profile.pierce,
     });
   }
@@ -560,7 +591,8 @@ function fireRogueWeapon() {
       pos: { x: state.player.x, y: state.player.y },
       vel: { x: shotDir.x * speed, y: shotDir.y * speed },
       radius: 4,
-      color: COLORS.white,
+      color: COLORS.cyan,
+      glow: COLORS.purple,
       pierce: 0,
       damage: state.playerDamage,
       ricochet: state.ricochetTimer > 0,
@@ -583,8 +615,8 @@ function fireRogueWeapon() {
 function updateBullets() {
   const arena = { x: -40, y: -40, w: WIDTH + 80, h: HEIGHT + 80 };
   state.bullets = state.bullets.filter((bullet) => {
-    bullet.pos.x += bullet.vel.x;
-    bullet.pos.y += bullet.vel.y;
+    bullet.pos.x += bullet.vel.x * delta;
+    bullet.pos.y += bullet.vel.y * delta;
     if (state.mode === "rogue" && bullet.ricochet) {
       let bounced = false;
       if ((bullet.pos.x <= 0 && bullet.vel.x < 0) || (bullet.pos.x >= WIDTH && bullet.vel.x > 0)) {
@@ -610,8 +642,8 @@ function updateBullets() {
 
   state.enemyBullets = state.enemyBullets.filter((bullet) => {
     if (!(state.mode === "rogue" && state.timeStopTimer > 0)) {
-      bullet.pos.x += bullet.vel.x;
-      bullet.pos.y += bullet.vel.y;
+      bullet.pos.x += bullet.vel.x * delta;
+      bullet.pos.y += bullet.vel.y * delta;
     }
     return bullet.pos.x >= arena.x && bullet.pos.x <= arena.x + arena.w && bullet.pos.y >= arena.y && bullet.pos.y <= arena.y + arena.h;
   });
@@ -629,6 +661,8 @@ function handleEnemyHits() {
         if (bullet.pierce > 0) bullet.pierce -= 1;
         else bullet.pos.x = -9999;
         hit = true;
+        enemy.hitFlashTimer = 12;
+        enemy.slowTimer = 18;
         spawnParticles({
           x: enemy.pos.x,
           y: enemy.pos.y,
@@ -659,19 +693,24 @@ function handleEnemyHits() {
 function handleRogueEnemyHits() {
   const deadIds = new Set();
   for (const enemy of state.enemies) {
-    if (enemy.pendingDeath || enemy.hp <= 0) continue;
+    const collidable = enemy.pendingDeath || enemy.hp > 0;
+    if (!collidable) continue;
     // 环绕子弹伤害
     for (const orb of state.orbitals) {
       if (!orb.pos) continue;
       const dist = Math.hypot(enemy.pos.x - orb.pos.x, enemy.pos.y - orb.pos.y);
       if (dist < enemy.radius + 6) {
-        enemy.hp -= state.playerDamage;
-        if (enemy.hp <= 0) {
-          if (state.timeStopTimer > 0) {
-            if (!enemy.pendingDeath) state.pendingFrozenKills.push(enemy);
-            enemy.pendingDeath = true;
-          } else deadIds.add(enemy);
-          break;
+        if (!enemy.pendingDeath && enemy.hp > 0) {
+          enemy.hp -= state.playerDamage;
+          enemy.hitFlashTimer = 12;
+          enemy.slowTimer = 18;
+          if (enemy.hp <= 0) {
+            if (state.timeStopTimer > 0) {
+              if (!enemy.pendingDeath) state.pendingFrozenKills.push(enemy);
+              enemy.pendingDeath = true;
+            } else deadIds.add(enemy);
+            break;
+          }
         }
       }
     }
@@ -680,10 +719,15 @@ function handleRogueEnemyHits() {
   for (const bullet of state.bullets) {
     if (deadIds.size === state.enemies.length) break;
     for (const enemy of state.enemies) {
-      if (enemy.pendingDeath || enemy.hp <= 0) continue;
+      const collidable = enemy.pendingDeath || enemy.hp > 0;
+      if (!collidable) continue;
       const dist = Math.hypot(enemy.pos.x - bullet.pos.x, enemy.pos.y - bullet.pos.y);
       if (dist < enemy.radius + (bullet.radius ?? 4)) {
-        enemy.hp -= bullet.damage ?? state.playerDamage;
+        if (!enemy.pendingDeath && enemy.hp > 0) {
+          enemy.hp -= bullet.damage ?? state.playerDamage;
+          enemy.hitFlashTimer = 12;
+          enemy.slowTimer = 18;
+        }
         if (bullet.pierce > 0) bullet.pierce -= 1;
         else bullet.pos.x = -9999;
         if (enemy.hp <= 0) {
@@ -766,12 +810,14 @@ function handleRogueItems() {
         case "rampage":
           state.rampageTimer = Math.max(state.rampageTimer, item.duration ?? 300);
           state.invincibleTimer = Math.max(state.invincibleTimer, item.duration ?? 300);
+          setEffectBanner("猛袭无敌！", item.color, 140);
           break;
         case "spread":
           state.modeShots = Math.min(state.modeShots + 1, 10);
           break;
         case "life":
           state.lives += 1;
+          setEffectBanner("生命 +1", item.color, 120);
           break;
         case "orbital":
           if (state.orbitals.length < 5) {
@@ -779,18 +825,23 @@ function handleRogueItems() {
           } else {
             state.orbitals.forEach((o) => (o.speed = (o.speed ?? 0.05) + 0.01));
           }
+          setEffectBanner("环绕子弹 增强", item.color, 120);
           break;
         case "ricochet":
           state.ricochetTimer = Math.max(state.ricochetTimer, item.duration ?? 600);
+          setEffectBanner("反弹 10s", item.color, 140);
           break;
         case "blink":
           state.blinkCharges = Math.min(state.maxBlinkCharges, state.blinkCharges + 1);
+          setEffectBanner("闪现充能 +1", item.color, 120);
           break;
         case "timestop":
           state.timeStopTimer = Math.max(state.timeStopTimer, item.duration ?? 180);
+          setEffectBanner("时间暂停 6s", item.color, 160);
           break;
         case "power":
           state.playerDamage += 1;
+          setEffectBanner("攻击 +1", item.color, 120);
           break;
       }
     } else remain.push(item);
@@ -975,6 +1026,15 @@ function drawEnemyShape(enemy) {
       ctx.arc(enemy.pos.x, enemy.pos.y, enemy.radius, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
+      if (enemy.hitFlashTimer > 0) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(0.6, 0.25 + enemy.hitFlashTimer / 20);
+        ctx.fillStyle = enemy.color;
+        ctx.beginPath();
+        ctx.arc(enemy.pos.x, enemy.pos.y, enemy.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
       break;
     case "sneak":
       ctx.beginPath();
@@ -984,6 +1044,18 @@ function drawEnemyShape(enemy) {
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
+      if (enemy.hitFlashTimer > 0) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(0.6, 0.25 + enemy.hitFlashTimer / 20);
+        ctx.fillStyle = enemy.color;
+        ctx.beginPath();
+        ctx.moveTo(enemy.pos.x, enemy.pos.y - enemy.radius);
+        ctx.lineTo(enemy.pos.x - enemy.radius, enemy.pos.y + enemy.radius);
+        ctx.lineTo(enemy.pos.x + enemy.radius, enemy.pos.y + enemy.radius);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
       break;
     case "zigzag": {
       const points = [
@@ -998,6 +1070,17 @@ function drawEnemyShape(enemy) {
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
+      if (enemy.hitFlashTimer > 0) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(0.6, 0.25 + enemy.hitFlashTimer / 20);
+        ctx.fillStyle = enemy.color;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i += 1) ctx.lineTo(points[i].x, points[i].y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
       break;
     }
     case "shooter": {
@@ -1009,6 +1092,17 @@ function drawEnemyShape(enemy) {
       ctx.fill();
       ctx.strokeStyle = COLORS.cyan;
       ctx.stroke();
+      if (enemy.hitFlashTimer > 0) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(0.6, 0.25 + enemy.hitFlashTimer / 20);
+        ctx.fillStyle = enemy.color;
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i += 1) ctx.lineTo(points[i].x, points[i].y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
       break;
     }
     case "charger": {
@@ -1020,12 +1114,28 @@ function drawEnemyShape(enemy) {
       ctx.lineTo(enemy.pos.x, enemy.pos.y + enemy.radius);
       ctx.strokeStyle = COLORS.white;
       ctx.stroke();
+      if (enemy.hitFlashTimer > 0) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(0.6, 0.25 + enemy.hitFlashTimer / 20);
+        ctx.fillStyle = enemy.color;
+        ctx.fillRect(enemy.pos.x - enemy.radius, enemy.pos.y - enemy.radius, size, size);
+        ctx.restore();
+      }
       break;
     }
     default:
       ctx.beginPath();
       ctx.arc(enemy.pos.x, enemy.pos.y, enemy.radius, 0, Math.PI * 2);
       ctx.fill();
+      if (enemy.hitFlashTimer > 0) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(0.6, 0.25 + enemy.hitFlashTimer / 20);
+        ctx.fillStyle = enemy.color;
+        ctx.beginPath();
+        ctx.arc(enemy.pos.x, enemy.pos.y, enemy.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
       break;
   }
 }
@@ -1194,12 +1304,19 @@ function drawCollectibles() {
 function drawBullets() {
   for (const bullet of state.bullets) {
     ctx.save();
-    ctx.shadowColor = bullet.color ?? COLORS.white;
-    ctx.shadowBlur = 10;
-    ctx.fillStyle = bullet.color ?? COLORS.white;
+    const r = bullet.radius ?? 4;
+    const grad = ctx.createRadialGradient(bullet.pos.x, bullet.pos.y, r * 0.2, bullet.pos.x, bullet.pos.y, r * 1.1);
+    grad.addColorStop(0, "rgba(255,255,255,0.9)");
+    grad.addColorStop(1, bullet.color ?? COLORS.cyan);
+    ctx.shadowColor = bullet.glow ?? bullet.color ?? COLORS.cyan;
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = grad;
+    ctx.strokeStyle = "rgba(255,255,255,0.6)";
+    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.arc(bullet.pos.x, bullet.pos.y, bullet.radius ?? 4, 0, Math.PI * 2);
+    ctx.arc(bullet.pos.x, bullet.pos.y, r, 0, Math.PI * 2);
     ctx.fill();
+    ctx.stroke();
     ctx.restore();
   }
   for (const bullet of state.enemyBullets) {
@@ -1288,6 +1405,57 @@ function drawHUD() {
   ctx.fillText("Pause/Resume: P", 15, infoY + 60);
 }
 
+function drawEffectBanner() {
+  if (!state.effectBanner || state.effectBanner.timer <= 0) return;
+  const { text, color, timer } = state.effectBanner;
+  const alpha = Math.min(1, timer / 30);
+  const pulse = 1 + 0.06 * Math.sin(timer * 0.3);
+  ctx.save();
+  ctx.translate(WIDTH / 2, 70);
+  ctx.scale(pulse, pulse);
+  ctx.globalAlpha = alpha;
+  const gradient = ctx.createLinearGradient(-220, 0, 220, 0);
+  gradient.addColorStop(0, "rgba(255,255,255,0.05)");
+  gradient.addColorStop(0.5, color ?? COLORS.cyan);
+  gradient.addColorStop(1, "rgba(255,255,255,0.05)");
+  ctx.fillStyle = gradient;
+  ctx.shadowColor = color ?? COLORS.white;
+  ctx.shadowBlur = 18;
+  ctx.font = "32px Segoe UI";
+  ctx.textAlign = "center";
+  ctx.fillText(text, 0, 0);
+  ctx.restore();
+}
+
+function drawTimeStopHourglass() {
+  if (state.timeStopTimer <= 0) return;
+  const duration = ROGUE_ITEMS.find((i) => i.code === "timestop")?.duration ?? 360;
+  const progress = 1 - state.timeStopTimer / duration;
+  const angle = Math.PI * progress; // 0 -> 180 度翻转
+  const x = WIDTH / 2;
+  const y = 120;
+  const size = 28;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.shadowColor = COLORS.gold;
+  ctx.shadowBlur = 16;
+  ctx.fillStyle = COLORS.gold;
+  ctx.strokeStyle = "rgba(255,255,255,0.9)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(-size, -size);
+  ctx.lineTo(size, -size);
+  ctx.lineTo(-size, size);
+  ctx.lineTo(size, size);
+  ctx.moveTo(-size, -size);
+  ctx.lineTo(size, size);
+  ctx.moveTo(size, -size);
+  ctx.lineTo(-size, size);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawGameOver() {
   ctx.fillStyle = "rgba(0,0,0,0.65)";
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
@@ -1315,20 +1483,30 @@ function drawPauseOverlay() {
 
 function updateTimers() {
   if (state.energy < state.energyMax) {
-    state.energy = Math.min(state.energyMax, state.energy + ENERGY_REGEN);
+    state.energy = Math.min(state.energyMax, state.energy + ENERGY_REGEN * delta);
   }
   if (state.multiplierTimer > 0) {
-    state.multiplierTimer -= 1;
+    state.multiplierTimer -= 1 * delta;
     if (state.multiplierTimer <= 0) state.multiplier = 1;
   }
-  if (state.shieldTimer > 0) state.shieldTimer -= 1;
-  if (state.invincibleTimer > 0) state.invincibleTimer -= 1;
-  if (state.bulletCooldown > 0) state.bulletCooldown -= 1;
-  if (state.bonusMessageTimer > 0) state.bonusMessageTimer -= 1;
-  if (state.rampageTimer > 0) state.rampageTimer -= 1;
-  if (state.ricochetTimer > 0) state.ricochetTimer -= 1;
-  if (state.timeStopTimer > 0) state.timeStopTimer -= 1;
-  if (state.timeStopTimer === 0 && state.pendingFrozenKills.length) flushFrozenDeaths();
+  if (state.shieldTimer > 0) state.shieldTimer -= 1 * delta;
+  if (state.invincibleTimer > 0) state.invincibleTimer -= 1 * delta;
+  if (state.bulletCooldown > 0) state.bulletCooldown -= 1 * delta;
+  if (state.bonusMessageTimer > 0) state.bonusMessageTimer -= 1 * delta;
+  if (state.rampageTimer > 0) state.rampageTimer -= 1 * delta;
+  if (state.ricochetTimer > 0) state.ricochetTimer -= 1 * delta;
+  const wasTimeStop = state.timeStopTimer > 0;
+  if (state.timeStopTimer > 0) state.timeStopTimer -= 1 * delta;
+  if (state.timeStopTimer <= 0) {
+    state.timeStopTimer = 0;
+    if (wasTimeStop) triggerShake(16, 5);
+    if (state.pendingFrozenKills.length) flushFrozenDeaths();
+  }
+  if (state.effectBanner?.timer > 0) state.effectBanner.timer -= 1 * delta;
+  state.enemies.forEach((enemy) => {
+    if (enemy.hitFlashTimer > 0) enemy.hitFlashTimer -= 1 * delta;
+    if (enemy.slowTimer > 0) enemy.slowTimer -= 1 * delta;
+  });
 }
 
 function flushFrozenDeaths() {
@@ -1364,6 +1542,7 @@ function updateGame() {
   }
   if (state.paused) return;
   updateParticles();
+  if (state.shakeTimer > 0) state.shakeTimer -= 1 * delta;
   if (!state.gameOver) {
     if (state.keys[" "] || state.isMouseDown) fireWeapon();
 
@@ -1373,14 +1552,14 @@ function updateGame() {
     updateBullets();
 
     if (state.mode === "rogue") {
-      state.modeElapsed += 1;
-      state.itemSpawnTimer += 1;
+      state.modeElapsed += delta;
+      state.itemSpawnTimer += delta;
       if (state.itemSpawnTimer >= state.itemSpawnInterval) {
         spawnRogueItem();
         state.itemSpawnTimer = 0;
       }
 
-      state.enemySpawnTimer += 1;
+      state.enemySpawnTimer += delta;
       state.enemySpawnInterval = Math.max(90, 170 - Math.floor(state.modeElapsed / 600) * 10);
       state.maxEnemies = Math.min(14, 8 + Math.floor(state.modeElapsed / 900));
       if (state.enemySpawnTimer >= state.enemySpawnInterval) {
@@ -1388,13 +1567,13 @@ function updateGame() {
         state.enemySpawnTimer = 0;
       }
     } else {
-      state.collectiblesTimer += 1;
+      state.collectiblesTimer += delta;
       if (state.collectiblesTimer >= state.collectiblesInterval) {
         spawnCollectible();
         state.collectiblesTimer = 0;
       }
 
-      state.enemySpawnTimer += 1;
+      state.enemySpawnTimer += delta;
       if (state.enemySpawnTimer >= state.enemySpawnInterval) {
         spawnEnemy();
         state.enemySpawnTimer = 0;
@@ -1412,6 +1591,13 @@ function updateGame() {
 }
 
 function renderGame() {
+  ctx.save();
+  if (state.shakeTimer > 0) {
+    const intensity = (state.shakeMag ?? 5) * (state.shakeTimer / 20);
+    const offsetX = randRange(-intensity, intensity);
+    const offsetY = randRange(-intensity, intensity);
+    ctx.translate(offsetX, offsetY);
+  }
   drawBackground();
   if (state.scene === "game") {
     drawCollectibles();
@@ -1420,14 +1606,23 @@ function renderGame() {
     drawParticles();
     drawPlayerAvatar();
     drawHUD();
+    drawEffectBanner();
+    drawTimeStopHourglass();
     if (state.gameOver) drawGameOver();
     else if (state.paused) drawPauseOverlay();
   } else {
     drawParticles();
   }
+  ctx.restore();
 }
 
 function gameLoop() {
+  const now = performance.now();
+  deltaMs = now - lastTime;
+  delta = Math.min(2, deltaMs / 16.67);
+  state.dt = delta;
+  state.dtMs = deltaMs;
+  lastTime = now;
   updateGame();
   renderGame();
   requestAnimationFrame(gameLoop);
