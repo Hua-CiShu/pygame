@@ -25,6 +25,10 @@ const btnTouchPause = document.getElementById("btn-touch-pause");
 const btnTouchBlink = document.getElementById("btn-touch-blink");
 const btnTouchFullscreen = document.getElementById("btn-touch-fullscreen");
 
+function setFullscreenClass(active) {
+  document.body.classList.toggle("fs-game", !!active);
+}
+
 function hideMenu() {
   if (menuOverlay) menuOverlay.style.display = "none";
 }
@@ -57,16 +61,25 @@ function wireInput() {
   }
   if (btnTouchFullscreen) {
     const requestFull = () => {
-      const el = document.documentElement;
       if (document.fullscreenElement) {
         document.exitFullscreen?.();
+        setFullscreenClass(false);
       } else {
-        (el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen || el.mozRequestFullScreen)?.call(el);
+        const target = canvas || document.documentElement;
+        const req =
+          target.requestFullscreen ||
+          target.webkitRequestFullscreen ||
+          target.msRequestFullscreen ||
+          target.mozRequestFullScreen;
+        if (req) req.call(target).catch?.(() => setFullscreenClass(true));
+        else setFullscreenClass(true);
       }
     };
     btnTouchFullscreen.addEventListener("click", requestFull);
     btnTouchFullscreen.addEventListener("touchstart", (e) => { e.preventDefault(); requestFull(); }, { passive: false });
   }
+
+  document.addEventListener("fullscreenchange", () => setFullscreenClass(!!document.fullscreenElement));
 }
 
 function bootstrap() {
