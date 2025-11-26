@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neon Harvest Web</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main>
+      <section class="hud">
+        <h1>Neon Harvest Web</h1>
+        <p class="instructions">
+          Move with WASD / Arrow Keys · Shoot with Space or Left Click · Collect
+          glowing orbs for energy, shields, and multipliers · Survive as long as
+          you can! Need to step away? Press P to pause/resume.
+        </p>
+      </section>
+      <canvas id="game" width="900" height="600"></canvas>
+      <section class="about">
+        <h2>About this port</h2>
+        <p>
+          This HTML5 version recreates the mechanics of the Pygame edition:
+          evolving weapons, distinct enemy archetypes, collectible boosts, and
+          escalating difficulty waves. Everything runs client-side, so you can
+          host the folder on GitHub Pages or any static server.
+        </p>
+        <p>
+          Tip: press <strong>R</strong> to restart after a defeat. Keyboard +
+          mouse recommended.
+        </p>
+      </section>
+    </main>
+    <div id="menu-overlay" class="menu-overlay">
+      <div class="menu-card">
+        <h2>选择模式</h2>
+        <p class="menu-subtitle">Pick a mode to begin.</p>
+        <div class="menu-actions">
+          <button id="btn-start-endless" class="primary">开始无尽模式</button>
+          <div class="menu-group">
+            <span class="menu-label">试炼模式</span>
+            <div class="menu-rows">
+              <button id="btn-start-rogue-easy" class="ghost">简单 · 快补给</button>
+              <button id="btn-start-rogue" class="ghost">标准 · 适中</button>
+              <button id="btn-start-rogue-hard" class="ghost">艰难 · 少补给</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="touch-controls">
+      <button id="btn-touch-pause" class="touch-btn">暂停</button>
+      <button id="btn-touch-blink" class="touch-btn">闪现</button>
+      <button id="btn-touch-fullscreen" class="touch-btn">全屏</button>
+    </div>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>
+
