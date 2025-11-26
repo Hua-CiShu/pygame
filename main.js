@@ -13,9 +13,11 @@ import {
   handleTouchEnd,
   startLoop,
   triggerBlink,
+  restartGame,
 } from "./game.js";
 
 const canvas = document.getElementById("game");
+const gameFrame = document.getElementById("game-frame");
 const menuOverlay = document.getElementById("menu-overlay");
 const btnStartEndless = document.getElementById("btn-start-endless");
 const btnStartRogue = document.getElementById("btn-start-rogue");
@@ -24,6 +26,7 @@ const btnStartRogueHard = document.getElementById("btn-start-rogue-hard");
 const btnTouchPause = document.getElementById("btn-touch-pause");
 const btnTouchBlink = document.getElementById("btn-touch-blink");
 const btnTouchFullscreen = document.getElementById("btn-touch-fullscreen");
+const btnTouchRestart = document.getElementById("btn-touch-restart");
 
 function setFullscreenClass(active) {
   document.body.classList.toggle("fs-game", !!active);
@@ -71,7 +74,7 @@ function wireInput() {
         setFullscreenClass(false);
         updatePortraitFlag();
       } else {
-        const target = canvas || document.documentElement;
+        const target = gameFrame || canvas || document.documentElement;
         const req =
           target.requestFullscreen ||
           target.webkitRequestFullscreen ||
@@ -94,6 +97,11 @@ function wireInput() {
   });
   window.addEventListener("resize", updatePortraitFlag);
   window.addEventListener("orientationchange", updatePortraitFlag);
+
+  if (btnTouchRestart) {
+    btnTouchRestart.addEventListener("click", () => restartGame());
+    btnTouchRestart.addEventListener("touchstart", (e) => { e.preventDefault(); restartGame(); }, { passive: false });
+  }
 }
 
 function bootstrap() {
