@@ -621,7 +621,7 @@ function drawCollectibles() {
     ctx.stroke();
     ctx.restore();
   }
-  if (state.mode === "endless" && state.poisonZones?.length) {
+  if (state.poisonZones?.length) {
     ctx.save();
     for (const zone of state.poisonZones) {
       const g = ctx.createRadialGradient(zone.x, zone.y, 0, zone.x, zone.y, zone.radius);
@@ -634,7 +634,7 @@ function drawCollectibles() {
     }
     ctx.restore();
   }
-  if (state.mode === "endless" && state.rifts?.length) {
+  if (state.rifts?.length) {
     ctx.save();
     for (const rift of state.rifts) {
       const g = ctx.createRadialGradient(rift.x, rift.y, 0, rift.x, rift.y, rift.radius);
