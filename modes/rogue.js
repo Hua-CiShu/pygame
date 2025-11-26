@@ -8,7 +8,7 @@ const ROGUE_ENEMY_TYPES = [
   { name: "sneaky", behavior: "sneak", color: "#FF8C5A", speed: 2.6, radius: 15, weight: 3, baseHp: 2 },
   { name: "zigzag", behavior: "zigzag", color: "#FF78D2", speed: 2.3, radius: 16, weight: 2.2, baseHp: 2 },
   { name: "shooter", behavior: "shooter", color: "#FFD890", speed: 1.9, radius: 18, weight: 2, baseHp: 2 },
-  { name: "charger", behavior: "charger", color: "#78FFAA", speed: 2.1, radius: 16, weight: 2 },
+  { name: "charger", behavior: "charger", color: "#78FFAA", speed: 2.1, radius: 16, weight: 2, baseHp: 2 },
   { name: "splitter", behavior: "splitter", color: "#FFB2A6", speed: 1.8, radius: 18, weight: 2.4, baseHp: 2.4 },
   { name: "brute", behavior: "brute", color: "#5CE0A5", speed: 1.4, radius: 20, weight: 1.6, baseHp: 6 },
   { name: "commander", behavior: "commander", color: "#8BE7FF", speed: 1.3, radius: 20, weight: 1.8, baseHp: 4.4 },
@@ -29,9 +29,9 @@ const ROGUE_ITEMS = [
 ];
 
 const ROGUE_DIFFICULTIES = {
-  easy: { key: "easy", label: "简单", itemInterval: 200 },
-  normal: { key: "normal", label: "标准", itemInterval: 260 },
-  hard: { key: "hard", label: "艰难", itemInterval: 320 },
+  easy: { key: "easy", label: "简单", itemInterval: 200, hpMult: 1 },
+  normal: { key: "normal", label: "标准", itemInterval: 260, hpMult: 1.5 },
+  hard: { key: "hard", label: "艰难", itemInterval: 320, hpMult: 2 },
 };
 
 export function initState(state, difficulty = "normal") {
@@ -68,6 +68,7 @@ export function initState(state, difficulty = "normal") {
   state.itemSpawnTimer = 0;
   const diff = ROGUE_DIFFICULTIES[difficulty] ?? ROGUE_DIFFICULTIES.normal;
   state.itemSpawnInterval = diff.itemInterval;
+  state.diffHpMult = diff.hpMult ?? 1;
 }
 
 export function resetState(state) {
@@ -167,11 +168,12 @@ function spawnEnemy(state) {
 
   const template = chooseWeighted(ROGUE_ENEMY_TYPES);
   const hpScale = Math.max(1, 1 + Math.floor(state.modeElapsed / 900));
+  const diffMult = state.diffHpMult ?? 1;
   state.enemies.push({
     ...template,
     pos,
     baseSpeed: template.speed,
-    hp: (template.baseHp ?? 1) * hpScale,
+    hp: (template.baseHp ?? 1) * hpScale * diffMult,
     zigzagDir: Math.random() < 0.5 ? -1 : 1,
     zigzagTimer: 0,
     shootCooldown: randRange(90, 140),
@@ -350,7 +352,7 @@ function spawnSplitChildren(state, enemy) {
       baseSpeed: enemy.baseSpeed * 1.2,
       radius: Math.max(10, enemy.radius * 0.65),
       pos: { x: enemy.pos.x + randRange(-10, 10), y: enemy.pos.y + randRange(-10, 10) },
-      hp: Math.max(1, (enemy.baseHp ?? 1) * 0.8),
+      hp: Math.max(1, (enemy.baseHp ?? 1) * 0.8 * (state.diffHpMult ?? 1)),
       zigzagDir: Math.random() < 0.5 ? -1 : 1,
       zigzagTimer: 0,
       shootCooldown: randRange(120, 160),
@@ -396,7 +398,7 @@ function spawnRiftMinion(state, rift) {
     baseSpeed: 2.0,
     radius: 12,
     pos: { x: rift.x + randRange(-8, 8), y: rift.y + randRange(-8, 8) },
-    hp: 2,
+    hp: 2 * (state.diffHpMult ?? 1),
     zigzagDir: Math.random() < 0.5 ? -1 : 1,
     zigzagTimer: 0,
     shootCooldown: randRange(130, 180),
