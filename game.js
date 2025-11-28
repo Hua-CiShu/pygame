@@ -216,7 +216,8 @@ function updateStarfield() {
 
 function maybeTriggerUltimate() {
   if (state.ultimateIncoming || state.ultimateActive) return;
-  if (state.bossActive) return;
+  const otherBossAlive = state.enemies.some((e) => e.isBoss && !e.isUltimate && e.hp > 0);
+  if (otherBossAlive) return;
   const endlessReady = state.mode === "endless" && (state.level ?? 0) >= 10;
   const rogueReady = state.mode === "rogue" && (state.playerDamage ?? 0) >= 10;
   if (endlessReady || rogueReady) {
