@@ -90,7 +90,7 @@ export function update(state, delta) {
   state.bossActive = state.enemies.some((e) => e.isBoss && e.hp > 0);
   if (state.ultimateIncoming || state.ultimateActive) state.bossActive = true;
   if (!state.bossActive) state.bossTimer += delta;
-  const bossCooldown = 900 + (state.bossDefeated ?? 0) * 240;
+  const bossCooldown = 6000 + (state.bossDefeated ?? 0) * 240;
   if (!state.bossActive && state.level >= 3 && state.bossTimer >= bossCooldown) {
     spawnBoss(state);
   }
