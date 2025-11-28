@@ -1,0 +1,94 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neon Harvest Web</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main>
+      <section class="hud">
+        <h1>Neon Harvest Web</h1>
+        <p class="instructions">
+          Move with WASD / Arrow Keys · Shoot with Space or Left Click · Collect
+          glowing orbs for energy, shields, and multipliers · Survive as long as
+          you can! Need to step away? Press P to pause/resume.
+        </p>
+      </section>
+      <div id="game-frame" class="game-frame">
+        <canvas id="game" width="900" height="600"></canvas>
+        <div class="touch-controls">
+          <button id="btn-touch-pause" class="touch-btn">暂停</button>
+          <button id="btn-touch-blink" class="touch-btn">闪现</button>
+          <button id="btn-touch-restart" class="touch-btn">重来</button>
+          <button id="btn-touch-fullscreen" class="touch-btn">全屏</button>
+        </div>
+      </div>
+      <section class="about">
+        <h2>About this port</h2>
+        <p>
+          This HTML5 version recreates the mechanics of the Pygame edition:
+          evolving weapons, distinct enemy archetypes, collectible boosts, and
+          escalating difficulty waves. Everything runs client-side, so you can
+          host the folder on GitHub Pages or any static server.
+        </p>
+        <p>
+          Tip: press <strong>R</strong> to restart after a defeat. Keyboard +
+          mouse recommended.
+        </p>
+      </section>
+    </main>
+    <div id="menu-overlay" class="menu-overlay">
+      <div class="menu-card">
+        <h2>选择模式</h2>
+        <div class="auth-card" id="auth-card">
+          <div class="auth-row">
+            <input id="auth-username" type="text" placeholder="用户名（3-30 个字母或数字）" aria-label="用户名" />
+            <input id="auth-password" type="password" placeholder="密码（至少 6 字符）" aria-label="密码" />
+          </div>
+          <div style="font-size:0.85rem;color:#9ab0d8;margin-bottom:0.5rem">用户名：字母或数字（3-30）；密码：至少 6 字符</div>
+          <div class="auth-actions">
+            <button id="btn-auth-register" class="ghost">注册</button>
+            <button id="btn-auth-login" class="primary">登录</button>
+            <button id="btn-auth-logout" class="ghost" style="display:none">登出</button>
+          </div>
+          <p id="auth-status" class="menu-subtitle">匿名模式运行游戏（或登录以保存分数）</p>
+        </div>
+        <p class="menu-subtitle">Pick a mode to begin.</p>
+        <div class="menu-actions">
+          <button id="btn-start-endless" class="primary">开始无尽模式</button>
+          <div class="menu-group">
+            <span class="menu-label">试炼模式</span>
+            <div class="menu-rows">
+              <button id="btn-start-rogue-easy" class="ghost">简单 · 快补</button>
+              <button id="btn-start-rogue" class="ghost">标准 · 适中</button>
+              <button id="btn-start-rogue-hard" class="ghost">艰难 · 少补</button>
+            </div>
+          </div>
+        </div>
+        <div class="menu-card-footer">
+          <h3 style="margin-top: 1rem; margin-bottom: 0.5rem; color: #79f7ff">排行榜</h3>
+          <div id="leaderboard" class="menu-subtitle">加载中…</div>
+          <div style="margin-top: 0.5rem; display:flex; gap:0.5rem;">
+            <button id="btn-show-my-scores" class="ghost">我的分数</button>
+            <button id="btn-refresh-leaderboard" class="ghost">刷新榜单</button>
+          </div>
+          <div id="my-scores" style="margin-top:0.5rem; color:#c8d0ff">未登录时无法显示</div>
+        </div>
+      </div>
+    </div>
+    <div id="ready-overlay" class="ready-overlay">
+      <div class="menu-card">
+        <h2>准备好了吗？</h2>
+        <p class="menu-subtitle">模式：<span id="ready-mode-label">-</span></p>
+        <p class="menu-subtitle" style="margin-bottom:1rem">确认后开始游戏，或返回重新选择。</p>
+        <div class="menu-actions" style="justify-content:center; gap:0.5rem">
+          <button id="btn-ready-start" class="primary">开始游戏</button>
+          <button id="btn-ready-back" class="ghost">返回模式选择</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="main.js"></script>
+  </body>
+</html>
